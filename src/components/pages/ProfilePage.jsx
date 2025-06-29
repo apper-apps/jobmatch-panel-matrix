@@ -142,7 +142,7 @@ const ProfilePage = () => {
     <div className="h-full flex flex-col">
       <Header 
         title="Profile" 
-        subtitle={`Last updated ${new Date(profile.importedAt).toLocaleDateString()}`}
+subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
         actions={headerActions}
       />
       

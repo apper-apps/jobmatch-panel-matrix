@@ -45,12 +45,12 @@ const JobMatchesPage = () => {
       job.title.toLowerCase().includes(filters.search.toLowerCase()) ||
       job.company.toLowerCase().includes(filters.search.toLowerCase());
     
-    const matchesMinMatch = (job.profileMatch + job.preferenceMatch) / 2 >= filters.minMatch;
+const matchesMinMatch = (job.profile_match + job.preference_match) / 2 >= filters.minMatch;
     
-    const matchesJobType = filters.jobType === 'all' || job.jobType === filters.jobType;
+const matchesJobType = filters.jobType === 'all' || job.job_type === filters.jobType;
     
-    const matchesWorkArrangement = filters.workArrangement === 'all' || 
-      job.workArrangement === filters.workArrangement;
+const matchesWorkArrangement = filters.workArrangement === 'all' || 
+      job.work_arrangement === filters.workArrangement;
 
     return matchesSearch && matchesMinMatch && matchesJobType && matchesWorkArrangement;
   });

@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { motion } from 'framer-motion';
 import ApperIcon from '@/components/ApperIcon';
 import Button from '@/components/atoms/Button';
 import Badge from '@/components/atoms/Badge';
-
+import { AuthContext } from '../../App';
 const Header = ({ title, subtitle, actions }) => {
   return (
     <motion.header
@@ -23,7 +23,7 @@ const Header = ({ title, subtitle, actions }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+<div className="flex items-center gap-4">
           {/* Notifications */}
           <div className="relative">
             <Button variant="ghost" icon="Bell" className="p-2">
@@ -44,6 +44,21 @@ const Header = ({ title, subtitle, actions }) => {
               Searching for matches...
             </span>
           </div>
+
+          {/* Logout Button */}
+          <Button
+            variant="ghost"
+            icon="LogOut"
+            onClick={() => {
+              const authContext = React.useContext(AuthContext);
+              if (authContext?.logout) {
+                authContext.logout();
+              }
+            }}
+            className="p-2"
+          >
+            Logout
+          </Button>
 
           {/* Actions */}
           {actions && (
