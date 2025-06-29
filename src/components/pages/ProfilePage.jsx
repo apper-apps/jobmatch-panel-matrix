@@ -46,11 +46,11 @@ const ProfilePage = () => {
       return;
     }
 
-    setUploading(true);
+setUploading(true);
     setError('');
 
     try {
-      const data = await userProfileService.uploadResume(file);
+      const data = await userProfileService.importResume(file);
       
       if (!data) {
         throw new Error('No data received from upload');
