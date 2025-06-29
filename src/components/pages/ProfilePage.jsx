@@ -49,13 +49,12 @@ const ProfilePage = () => {
 setUploading(true);
     setError('');
 
-    try {
+try {
       const data = await userProfileService.importResume(file);
       
       if (!data) {
         throw new Error('No data received from upload');
       }
-
       // Parse extracted data with validation
       let experience = [];
       let education = [];
@@ -89,19 +88,26 @@ setUploading(true);
         skills = data.skills.split('\n').filter(s => s.trim()).slice(0, 50); // Limit skills
       }
 
-      const profileData = {
-        name: data.Name || 'Name not available',
-        email: data.email || '',
+const profileData = {
+        name: data.name || data.Name || 'Name not available',
+        email: data.email || 'Email not available',
         experience,
         education,
         skills,
-        imported_at: data.imported_at
+        imported_at: data.imported_at || new Date().toISOString()
       };
 
-      setProfile(profileData);
-      toast.success('Resume uploaded and processed successfully!');
+setProfile(profileData);
+      
+      // Show appropriate success message based on what was extracted
+      if (profileData.name === 'Name not available' || profileData.email === 'Email not available') {
+        toast.success('Resume uploaded with partial information. Please review and update missing details.');
+      } else {
+        toast.success('Resume uploaded and processed successfully!');
+      }
     } catch (err) {
-      toast.error('Failed to import resume. Please try again.');
+      const errorMessage = err.message || 'Failed to import resume. Please try again.';
+      toast.error(errorMessage);
       console.error('Error uploading file:', err);
     } finally {
       setUploading(false);

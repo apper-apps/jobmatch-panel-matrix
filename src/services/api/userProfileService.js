@@ -159,32 +159,46 @@ async importResume(file) {
 
 // Use actual parsing logic based on configuration with multiple fallback patterns
         
-        // Enhanced name extraction with multiple strategies
+// Enhanced name extraction with multiple strategies
         let nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i);
         
         if (!nameMatches) {
           // Try to find name in first few lines (common in resume headers)
-          const firstLines = extractedText.split('\n').slice(0, 5);
+          const firstLines = extractedText.split('\n').slice(0, 8);
           for (const line of firstLines) {
-            const lineNameMatch = line.trim().match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)$/);
+            const cleanLine = line.trim();
+            // Look for full names (First Last, First Middle Last, etc.)
+            const lineNameMatch = cleanLine.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)$/);
             if (lineNameMatch && lineNameMatch[1].length > 5 && lineNameMatch[1].length < 50) {
-              nameMatches = lineNameMatch;
-              break;
+              // Validate it's not a common header/title
+              const commonHeaders = ['curriculum vitae', 'resume', 'contact information', 'personal details'];
+              if (!commonHeaders.some(header => lineNameMatch[1].toLowerCase().includes(header))) {
+                nameMatches = lineNameMatch;
+                break;
+              }
             }
           }
         }
         
         if (!nameMatches) {
-          // Try contact section
-          const contactSection = extractedText.match(/(?:Contact|Personal Information)(.*?)(?:Experience|Education|Skills|Summary)/si);
+          // Try contact section with broader patterns
+          const contactSection = extractedText.match(/(?:Contact|Personal Information|Contact Information)(.*?)(?:Experience|Education|Skills|Summary|Objective)/si);
           if (contactSection) {
-            nameMatches = contactSection[1].match(/([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+            nameMatches = contactSection[1].match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)/);
           }
         }
         
         if (!nameMatches) {
-          // Try general pattern for names at beginning of lines
-          nameMatches = extractedText.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)/m);
+          // Try to find names near email addresses
+          const emailContext = extractedText.match(/([A-Z][a-z]+\s+[A-Z][a-z]+).*?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (emailContext) {
+            nameMatches = [emailContext[0], emailContext[1]];
+          }
+        }
+        
+        if (!nameMatches) {
+          // Try general pattern for names at beginning of lines with word boundaries
+          nameMatches = extractedText.match(/^\s*([A-Z][a-z]+\s+[A-Z][a-z]+)\s*$/m);
         }
         
         if (nameMatches) {
@@ -193,15 +207,26 @@ async importResume(file) {
           extractionErrors.push('Name not found in PDF content');
         }
 
-        // Enhanced email extraction with multiple strategies
+// Enhanced email extraction with multiple strategies
         let emailMatches = extractedText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
         
         if (!emailMatches) {
-          // Try contact section specific search
-          const contactSection = extractedText.match(/(?:Contact|Email|Personal Information)(.*?)(?:Experience|Education|Skills|Summary)/si);
+          // Try contact section specific search with broader patterns
+          const contactSection = extractedText.match(/(?:Contact|Email|Personal Information|Contact Information)(.*?)(?:Experience|Education|Skills|Summary|Objective)/si);
           if (contactSection) {
             emailMatches = contactSection[1].match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
           }
+        }
+        
+        if (!emailMatches) {
+          // Try searching in header section (first 10 lines)
+          const headerLines = extractedText.split('\n').slice(0, 10).join('\n');
+          emailMatches = headerLines.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        }
+        
+        if (!emailMatches) {
+          // Try with more liberal email pattern
+          emailMatches = extractedText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6})/);
         }
         
         if (emailMatches) {
@@ -295,14 +320,29 @@ async importResume(file) {
         });
       }
 
-      // Validate that we have minimum required data
-// More forgiving validation - require at least one essential field
+// Validate that we have minimum required data - require at least one essential field
       if (!extractedData.name && !extractedData.email) {
         const missingFields = [];
         if (!extractedData.name) missingFields.push('name');
         if (!extractedData.email) missingFields.push('email address');
         
         throw new Error(`Unable to extract essential profile information from PDF. Missing: ${missingFields.join(', ')}. Please ensure the PDF contains clearly formatted contact information in the header section or a dedicated contact area.`);
+      }
+      
+      // Log what was found vs what was missing for better user feedback
+      const extractionSummary = {
+        found: [],
+        missing: []
+      };
+      
+      if (extractedData.name) extractionSummary.found.push('name');
+      else extractionSummary.missing.push('name');
+      
+      if (extractedData.email) extractionSummary.found.push('email');
+      else extractionSummary.missing.push('email');
+      
+      if (extractionSummary.missing.length > 0) {
+        console.warn(`PDF import partial success - Missing: ${extractionSummary.missing.join(', ')}, Found: ${extractionSummary.found.join(', ')}`);
       }
       
       // Log what was successfully extracted for debugging
