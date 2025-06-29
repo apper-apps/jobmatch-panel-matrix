@@ -648,6 +648,14 @@ async importResume(file) {
       let aiExtractionUsed = false;
       
       try {
+// Configure PDF.js worker source to resolve GlobalWorkerOptions error
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+            'pdfjs-dist/build/pdf.worker.min.js',
+            import.meta.url
+          ).toString();
+        }
+
         // Enhanced PDF document loading with comprehensive error handling
         console.log('Loading PDF document with enhanced configuration...');
         
