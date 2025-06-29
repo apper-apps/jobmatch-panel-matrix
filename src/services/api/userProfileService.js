@@ -37,8 +37,22 @@ export const userProfileService = {
       return {
 name: data.Name,
         email: data.email,
-        experience: data.experience ? JSON.parse(data.experience) : [],
-        education: data.education ? JSON.parse(data.education) : [],
+        experience: (() => {
+          try {
+            return data.experience && data.experience.trim() ? JSON.parse(data.experience) : [];
+          } catch (e) {
+            console.warn('Failed to parse experience data:', e);
+            return [];
+          }
+        })(),
+        education: (() => {
+          try {
+            return data.education && data.education.trim() ? JSON.parse(data.education) : [];
+          } catch (e) {
+            console.warn('Failed to parse education data:', e);
+            return [];
+          }
+        })(),
         skills: data.skills ? data.skills.split('\n').filter(s => s.trim()) : [],
         importedAt: data.imported_at ? new Date(data.imported_at).toISOString() : new Date().toISOString()
       };
