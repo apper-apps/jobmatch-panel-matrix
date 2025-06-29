@@ -4,7 +4,8 @@ const Badge = ({
   children, 
   variant = 'default', 
   size = 'md',
-  className = '' 
+  className = '',
+  onClick
 }) => {
   const baseClasses = 'inline-flex items-center font-medium rounded-full';
   
@@ -24,10 +25,13 @@ const Badge = ({
     lg: 'px-3 py-1.5 text-base',
   };
 
-  const badgeClasses = `${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`;
+const badgeClasses = `${baseClasses} ${variants[variant]} ${sizes[size]} ${onClick ? 'cursor-pointer select-none' : ''} ${className}`;
 
   return (
-    <span className={badgeClasses}>
+    <span 
+      className={badgeClasses}
+      onClick={onClick}
+    >
       {children}
     </span>
   );
