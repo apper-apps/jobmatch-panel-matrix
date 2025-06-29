@@ -448,27 +448,7 @@ buildJobSearchPrompt(searchQuery, profile, preferences) {
       : 'role not specified';
 
     return `
-You are an expert AI job search agent with access to real-time job board data. Your task is to search and extract ACTUAL job opportunities from major job boards and career sites, not generate fictional jobs.
-
-JOB BOARD INTEGRATION INSTRUCTIONS:
-Search the following platforms for real-time job opportunities:
-- LinkedIn Jobs (linkedin.com/jobs)
-- Indeed (indeed.com)
-- Glassdoor (glassdoor.com)
-- AngelList/Wellfound (wellfound.com) - for startup jobs
-- RemoteOK (remoteok.io) - for remote positions
-- Stack Overflow Jobs (stackoverflow.com/jobs) - for tech roles
-- Monster (monster.com)
-- ZipRecruiter (ziprecruiter.com)
-- CareerBuilder (careerbuilder.com)
-- Company career pages for major employers in the user's field
-
-SEARCH METHODOLOGY:
-1. Use the user's search query "${searchQuery}" as the primary search term
-2. Cross-reference with user location: ${userLocation}
-3. Filter by user's role and experience level: ${userRole}
-4. Apply user preferences for job type and work arrangement
-5. Extract real job postings with actual URLs and company information
+You are an expert AI job matching system generating realistic job opportunities based on current market conditions and user preferences. Create contextually appropriate job listings that align with the user's search query and career profile.
 
 USER SEARCH QUERY: "${searchQuery}"
 
@@ -487,57 +467,54 @@ USER JOB PREFERENCES:
 - Must Include: ${(preferences.positiveKeywords || []).join(', ') || 'Growth opportunities'}
 - Must Avoid: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
-JOB EXTRACTION REQUIREMENTS:
-1. REAL JOBS ONLY: Extract actual job postings from live job boards
-2. CURRENT POSTINGS: Focus on jobs posted within the last 30 days
-3. LOCATION ACCURACY: Only jobs in user's specified locations or remote if acceptable
-4. ROLE RELEVANCE: Jobs must match user's career field and experience level
-5. COMPLETE DATA: Extract all available information including real URLs and company details
+GENERATE 8-12 realistic job opportunities that:
+1. Match the search query "${searchQuery}" and user's career background
+2. Are located in user's preferred locations: ${(preferences.locations || []).join(', ') || userLocation}
+3. Align with preferred job types: ${(preferences.jobTypes || []).join(', ') || 'Full-time'}
+4. Match work arrangement preferences: ${(preferences.workArrangements || []).join(', ') || 'Any'}
+5. Include user's positive keywords: ${(preferences.positiveKeywords || []).join(', ') || 'Growth'}
+6. Avoid negative keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None'}
+7. Offer appropriate salary ranges based on user expectations
+8. Represent diverse company sizes and industries
+9. Include realistic job descriptions with relevant responsibilities
+10. Have posting dates within the last 14 days
 
-SEARCH EXECUTION STEPS:
-1. Query each job board using optimized search terms
-2. Filter results by location, role, and user preferences
-3. Extract detailed information from job postings
-4. Validate job relevance against user profile
-5. Include actual application URLs and company information
-
-Return 8-12 REAL job opportunities extracted from actual job boards as a JSON array:
+Return the job opportunities as a JSON array with this structure:
 
 [
   {
-    "title": "Actual job title from job board",
-    "company": "Real company name",
-    "location": "Actual job location matching user preferences",
-    "salary": "Real salary information if available",
-    "work_arrangement": "Remote/Hybrid/On-site as specified in posting",
-    "job_type": "Full-time/Part-time/Contract as posted",
-    "description": "Actual job description from the posting with key responsibilities and requirements",
-    "company_description": "Real company information and description",
-    "url": "ACTUAL application URL from job board",
-    "logo": "Company logo URL if available on job board",
-    "posted_date": "Actual posting date in ISO format",
-    "benefits": "Real benefits and perks mentioned in posting",
-    "profile_match": 85,
-    "preference_match": 90
+    "title": "Job title relevant to search query and user role",
+    "company": "Realistic company name (mix of known and fictional companies)",
+    "location": "Location from user's preferred locations list",
+    "salary": "Appropriate salary range for role and location",
+    "work_arrangement": "Remote/Hybrid/On-site based on user preferences",
+    "job_type": "Full-time/Part-time/Contract based on user preferences",
+    "description": "Comprehensive job description with responsibilities, requirements, and growth opportunities",
+    "company_description": "Realistic company background, culture, and mission statement",
+    "url": "https://example.com/jobs/apply/[job-id]",
+    "logo": "https://example.com/logos/[company-name].png",
+    "posted_date": "Recent date in ISO format (within last 14 days)",
+    "benefits": "Realistic benefits package including health, retirement, PTO, and perks",
+    "profile_match": 75-95,
+    "preference_match": 80-95
   }
 ]
 
-QUALITY ASSURANCE CHECKLIST:
-✓ All jobs are real postings from actual job boards
-✓ URLs link to actual job applications
-✓ Companies are real and verifiable
-✓ Job descriptions match actual posting content
-✓ Locations strictly match user preferences
-✓ Roles align with user's career trajectory
-✓ Salary information is accurate to market rates
-✓ Posted dates are recent and realistic
-
-CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
-CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
+QUALITY GUIDELINES:
+✓ Job titles clearly relate to the search query "${searchQuery}"
+✓ Companies represent diverse industries and sizes
+✓ Locations strictly match user's geographic preferences
+✓ Salaries are realistic for the role, experience level, and location
+✓ Job descriptions include specific responsibilities and qualifications
+✓ Benefits packages are comprehensive and market-appropriate
+✓ Work arrangements align with user preferences
+✓ Profile and preference match scores reflect realistic alignment
+✓ Posted dates are recent and believable
+✓ All job details are internally consistent and professional
 `;
 },
 
-  buildJobDiscoveryPrompt(profile, preferences) {
+buildJobDiscoveryPrompt(profile, preferences) {
     // Determine user's primary location and role for strict targeting
     const primaryLocation = preferences.locations && preferences.locations.length > 0 
       ? preferences.locations[0]
@@ -552,33 +529,7 @@ CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do no
       : 'Entry-level';
 
     return `
-You are an advanced AI job discovery agent with real-time access to major job boards and career platforms. Execute a comprehensive job discovery search across multiple platforms to find ACTUAL current job opportunities.
-
-REAL-TIME JOB BOARD DISCOVERY MISSION:
-Systematically search and extract live job postings from:
-
-PRIMARY PLATFORMS:
-- LinkedIn Jobs (linkedin.com/jobs) - Corporate and professional roles
-- Indeed (indeed.com) - Broad job market coverage
-- Glassdoor (glassdoor.com) - Company insights and opportunities
-- AngelList/Wellfound (wellfound.com) - Startup and tech companies
-- RemoteOK (remoteok.io) - Remote-first positions
-- FlexJobs (flexjobs.com) - Flexible work arrangements
-
-SPECIALIZED PLATFORMS (based on user role):
-- Stack Overflow Jobs - Tech and engineering roles
-- Behance Jobs - Creative and design positions
-- 99designs - Freelance design work
-- Upwork - Contract and freelance opportunities
-- TopTal - High-end consulting roles
-- Dice - Technology and IT positions
-
-COMPANY DIRECT SOURCES:
-- Fortune 500 company career pages
-- Startup company websites
-- Industry-specific job boards
-- Professional association job boards
-- Government job portals (if applicable)
+You are an intelligent AI career discovery system generating diverse, realistic job opportunities that match user profiles and current market trends. Create a comprehensive set of job listings that represent various career advancement paths and opportunities.
 
 USER PROFILE FOR TARGETED DISCOVERY:
 - Name: ${profile.name || 'Professional'}
@@ -596,64 +547,71 @@ DISCOVERY PARAMETERS:
 - Priority Keywords: ${(preferences.positiveKeywords || []).join(', ') || 'Growth, innovation, impact'}
 - Exclusion Keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
-INTELLIGENT DISCOVERY ALGORITHM:
-1. PROFILE-BASED SEARCH: Use user's ${currentRole} and skills for targeted queries
-2. LOCATION-SPECIFIC FILTERING: Focus on ${primaryLocation} and surrounding areas
-3. EXPERIENCE-LEVEL MATCHING: Target ${experienceLevel} positions
-4. SALARY RANGE OPTIMIZATION: Filter for appropriate compensation levels
-5. COMPANY SIZE PREFERENCE: Mix of startups, mid-size, and enterprise companies
-6. INDUSTRY DIVERSIFICATION: Explore adjacent industries for role transferability
-7. GROWTH OPPORTUNITY IDENTIFICATION: Prioritize roles with advancement potential
+INTELLIGENT DISCOVERY MISSION:
+Generate 10-15 diverse job opportunities that represent:
+1. DIRECT CAREER MATCHES: 40% of jobs closely aligned with current role "${currentRole}"
+2. ADVANCEMENT OPPORTUNITIES: 30% of jobs representing next-level positions
+3. LATERAL MOVES: 20% of jobs in adjacent roles or industries with transferable skills
+4. STRETCH OPPORTUNITIES: 10% of jobs that challenge user to grow into new areas
 
-JOB EXTRACTION PROTOCOL:
-- Extract ONLY real, currently posted job opportunities
-- Verify job URLs lead to actual applications
-- Include complete job descriptions from original postings
-- Capture real company information and culture details
-- Record actual salary ranges when available
-- Note authentic application deadlines and requirements
+COMPANY DIVERSITY REQUIREMENTS:
+- Include startups (1-50 employees), mid-size companies (51-500), and large enterprises (500+)
+- Mix of established companies, growing companies, and emerging startups
+- Represent various industries while maintaining relevance to user background
+- Include both local companies and remote-friendly organizations
 
-Return 10-15 REAL job discoveries from actual job boards in JSON format:
+LOCATION TARGETING:
+- Prioritize user's specified locations: ${(preferences.locations || []).join(', ') || primaryLocation}
+- Include remote opportunities if user preferences allow
+- Consider hybrid options for broader geographic reach
+- Ensure all locations align with user's stated preferences
+
+SALARY AND BENEFITS OPTIMIZATION:
+- Base salaries on ${experienceLevel} level expectations for the role and location
+- Meet or exceed user's minimum salary requirement: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+` : 'Competitive market rates'}
+- Include comprehensive benefits packages appropriate to company size and industry
+- Factor in cost of living for different locations
+
+KEYWORD INTEGRATION:
+- Incorporate positive keywords: ${(preferences.positiveKeywords || []).join(', ') || 'Growth, innovation, impact'}
+- Avoid negative keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
+- Ensure job descriptions naturally include relevant terms
+
+Return 10-15 job discoveries in JSON format:
 
 [
   {
-    "title": "Actual job title from live posting",
-    "company": "Real company with verifiable information",
-    "location": "Specific location matching user's geographic preferences",
-    "salary": "Real salary data from job posting or market research",
-    "work_arrangement": "Actual work arrangement specified in posting",
-    "job_type": "Employment type as listed on job board",
-    "description": "Complete job description extracted from original posting",
-    "company_description": "Real company background, culture, and mission",
-    "url": "Direct URL to actual job application page",
-    "logo": "Company logo URL from job board or company website",
-    "posted_date": "Actual posting date from job board",
-    "benefits": "Real benefits package and perks from job description",
-    "profile_match": 88,
-    "preference_match": 92
+    "title": "Job title appropriate for user's experience level and career progression",
+    "company": "Realistic company name representing diverse industries and sizes",
+    "location": "Location from user's geographic preferences",
+    "salary": "Competitive salary range appropriate for role and location",
+    "work_arrangement": "Work arrangement matching user preferences",
+    "job_type": "Employment type aligned with user preferences",
+    "description": "Detailed job description with responsibilities, requirements, and growth opportunities",
+    "company_description": "Comprehensive company background, culture, mission, and growth trajectory",
+    "url": "https://example.com/careers/apply/[job-id]",
+    "logo": "https://example.com/company-logos/[company-name].png",
+    "posted_date": "Recent posting date in ISO format (within last 14 days)",
+    "benefits": "Comprehensive benefits package including health, retirement, PTO, and company-specific perks",
+    "profile_match": 75-95,
+    "preference_match": 80-95
   }
 ]
 
-DISCOVERY VALIDATION REQUIREMENTS:
-✓ All opportunities are from active, current job postings
-✓ Companies are real and have verifiable online presence
-✓ Job URLs direct to actual application processes
-✓ Locations precisely match user's geographic preferences
-✓ Roles align with user's ${currentRole} career trajectory
+QUALITY ASSURANCE REQUIREMENTS:
+✓ All opportunities align with user's ${currentRole} career trajectory
 ✓ Experience requirements match ${experienceLevel} capabilities
-✓ Salary ranges reflect current market rates for the role/location
-✓ Job descriptions contain actual responsibilities and requirements
-✓ Company information is accurate and up-to-date
-✓ Benefits and perks reflect real offerings
-
-CRITICAL SUCCESS FACTORS:
-- Focus on jobs posted within the last 14 days for maximum relevance
-- Prioritize companies with strong growth trajectories
-- Include mix of established companies and emerging opportunities
-- Ensure all data is extracted from real job board sources
-- Validate that each opportunity offers genuine career advancement potential
-
-Execute this comprehensive job discovery mission and return ONLY verified, real job opportunities with complete, accurate information.
+✓ Salary ranges meet user expectations and market rates
+✓ Locations precisely match user's geographic preferences
+✓ Work arrangements align with user's stated preferences
+✓ Job descriptions include specific, relevant responsibilities
+✓ Company information is detailed and realistic
+✓ Benefits packages are comprehensive and market-appropriate
+✓ Profile and preference match scores accurately reflect alignment
+✓ Posted dates are recent and believable
+✓ Keywords are naturally integrated into job descriptions
+✓ Career progression opportunities are clearly articulated
+✓ Industry and role diversity provides meaningful choices
 `;
   },
 
