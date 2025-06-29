@@ -804,7 +804,7 @@ async importResume(file) {
               // Validate and map AI extracted data to our format
               extractedData = {
                 name: (aiData.name && typeof aiData.name === 'string' && aiData.name.trim()) ? aiData.name.trim() : '',
-                email: (aiData.email && typeof aiData.email === 'string' && aiData.email.includes('@')) ? aiData.email.trim() : '',
+email: (aiData.email && typeof aiData.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(aiData.email.trim())) ? aiData.email.trim() : '',
                 experience: Array.isArray(aiData.experience) ? aiData.experience.filter(exp => 
                   exp && typeof exp === 'object' && (exp.title || exp.company)
                 ) : [],
@@ -936,7 +936,10 @@ async importResume(file) {
           }
           
           if (emailMatches && !extractedData.email) {
-            extractedData.email = emailMatches[0].trim();
+const emailCandidate = emailMatches[0].trim();
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCandidate)) {
+                extractedData.email = emailCandidate;
+            }
           } else if (!extractedData.email) {
             extractionErrors.push('Email address not found in PDF content');
           }
