@@ -7,10 +7,7 @@ import React from "react";
 import ErrorComponent from "@/components/ui/Error";
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.js',
-  import.meta.url
-).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
 // AI service configurations
 const AI_SERVICES = {
   openai: {
