@@ -1,0 +1,49 @@
+{
+  "name": "John Smith",
+  "email": "john.smith@email.com",
+  "experience": [
+    {
+      "title": "Senior Software Engineer",
+      "company": "TechCorp Inc.",
+      "duration": "2021 - Present",
+      "description": "Led development of microservices architecture, mentored junior developers, and improved system performance by 40%."
+    },
+    {
+      "title": "Software Developer",
+      "company": "StartupXYZ",
+      "duration": "2019 - 2021",
+      "description": "Developed full-stack web applications using React and Node.js, implemented CI/CD pipelines."
+    },
+    {
+      "title": "Junior Developer",
+      "company": "WebAgency",
+      "duration": "2017 - 2019",
+      "description": "Built responsive websites and web applications, collaborated with design team on UI/UX improvements."
+    }
+  ],
+  "education": [
+    {
+      "degree": "Bachelor of Science in Computer Science",
+      "institution": "University of Technology",
+      "year": "2017",
+      "gpa": "3.8"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "React",
+    "Node.js",
+    "Python",
+    "TypeScript",
+    "AWS",
+    "Docker",
+    "Kubernetes",
+    "PostgreSQL",
+    "MongoDB",
+    "Git",
+    "Agile",
+    "Team Leadership",
+    "System Design"
+  ],
+  "importedAt": "2024-01-15T10:30:00Z"
+}
