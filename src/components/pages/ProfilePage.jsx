@@ -102,19 +102,29 @@ try {
         skills = data.skills.split('\n').filter(s => s.trim()).slice(0, 50); // Limit skills
       }
 
-const profileData = {
+// Validate email format before including in profile data
+      const isValidEmail = (email) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return email && emailRegex.test(email.trim());
+      };
+
+      const profileData = {
         name: data.name || data.Name || 'Name not available',
-        email: data.email || 'Email not available',
         experience,
         education,
         skills,
         imported_at: data.imported_at || new Date().toISOString()
       };
 
-setProfile(profileData);
+      // Only include email if it's valid
+      if (isValidEmail(data.email)) {
+        profileData.email = data.email.trim();
+      }
+
+      setProfile(profileData);
       
       // Show appropriate success message based on what was extracted
-      if (profileData.name === 'Name not available' || profileData.email === 'Email not available') {
+      if (profileData.name === 'Name not available' || !profileData.email) {
         toast.success('Resume uploaded with partial information. Please review and update missing details.');
       } else {
         toast.success('Resume uploaded and processed successfully!');
