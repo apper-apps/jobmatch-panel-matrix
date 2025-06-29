@@ -38,23 +38,94 @@ const params = {
 
 const response = await apperClient.fetchRecords('job_match', params);
       
+      // Enhanced debugging for job match loading failures
+      console.log('Job matches API response received:', {
+        success: response.success,
+        hasData: !!response.data,
+        dataType: Array.isArray(response.data) ? 'array' : typeof response.data,
+        dataLength: response.data?.length || 0,
+        responseKeys: Object.keys(response || {}),
+        timestamp: new Date().toISOString()
+      });
+      
       if (!response.success) {
-        console.error(response.message);
-        toast.error(response.message);
+        console.error('Job matches API call failed:', {
+          message: response.message,
+          error: response.error,
+          fullResponse: response
+        });
+        toast.error(`Failed to load job matches: ${response.message || 'Unknown API error'}`);
         return [];
       }
 
-      // Transform data to include both snake_case and camelCase properties for compatibility
-      const transformedData = (response.data || []).map(job => ({
-        ...job,
-        profileMatch: job.profile_match || 0,
-        preferenceMatch: job.preference_match || 0
-      }));
+      // Validate response data structure
+      if (!response.data) {
+        console.warn('Job matches API returned no data property');
+        toast.warning('No job matches data received from server');
+        return [];
+      }
+
+      if (!Array.isArray(response.data)) {
+        console.error('Job matches API returned invalid data format:', {
+          dataType: typeof response.data,
+          dataValue: response.data
+        });
+        toast.error('Invalid job matches data format received');
+        return [];
+      }
+
+      // Transform data with enhanced error handling
+      const transformedData = response.data.map((job, index) => {
+        if (!job || typeof job !== 'object') {
+          console.warn(`Invalid job object at index ${index}:`, job);
+          return null;
+        }
+
+        try {
+          return {
+            ...job,
+            profileMatch: typeof job.profile_match === 'number' ? job.profile_match : 0,
+            preferenceMatch: typeof job.preference_match === 'number' ? job.preference_match : 0
+          };
+        } catch (transformError) {
+          console.error(`Error transforming job at index ${index}:`, transformError, job);
+          return null;
+        }
+      }).filter(job => job !== null);
+
+      console.log(`Successfully processed ${transformedData.length} job matches out of ${response.data.length} received`);
+      
+      if (transformedData.length === 0 && response.data.length > 0) {
+        console.warn('All job matches failed transformation - possible data structure issues');
+        toast.warning('Job matches received but failed to process. Please refresh or contact support.');
+      }
 
       return transformedData;
     } catch (error) {
-      console.error("Error fetching job matches:", error);
-      toast.error("Failed to load job matches");
+      console.error("Critical error fetching job matches:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        response: error.response?.data,
+        status: error.response?.status,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Provide specific error messages based on error type
+      let errorMessage = "Failed to load job matches";
+      if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
+        errorMessage = "Network error loading job matches. Please check your connection.";
+      } else if (error.response?.status === 401) {
+        errorMessage = "Authentication failed. Please log in again.";
+      } else if (error.response?.status === 403) {
+        errorMessage = "Access denied to job matches. Please check your permissions.";
+      } else if (error.response?.status >= 500) {
+        errorMessage = "Server error loading job matches. Please try again later.";
+      } else if (error.message) {
+        errorMessage = `Job matches loading failed: ${error.message}`;
+      }
+      
+      toast.error(errorMessage);
       throw error;
     }
   },
