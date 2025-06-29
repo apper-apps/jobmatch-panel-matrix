@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
-import { AuthContext } from "@/contexts/AuthContext";
+import { AuthContext } from "@/App";
 import ApperIcon from "@/components/ApperIcon";
 import Header from "@/components/organisms/Header";
 import Badge from "@/components/atoms/Badge";
