@@ -27,9 +27,9 @@ const AI_SERVICES = {
   }
 };
 
-// Comprehensive AI prompt for resume extraction
+// Enhanced AI prompt for robust resume extraction
 const AI_EXTRACTION_PROMPT = `
-You are a professional resume parser. Extract ALL available information from the provided resume text and return it as a valid JSON object with the following structure:
+You are an expert resume parser with deep understanding of various resume formats. Extract ALL available information from the provided resume text and return it as a valid JSON object with the following structure:
 
 {
   "name": "Full name of the person",
@@ -94,15 +94,28 @@ You are a professional resume parser. Extract ALL available information from the
   ]
 }
 
-Instructions:
-1. Extract ALL information present in the resume text
-2. If a field is not found, use null or empty array as appropriate
-3. For experience and education, include ALL entries found
-4. Skills should be comprehensive and include both technical and soft skills
-5. Preserve exact dates, company names, and titles as written
-6. Return ONLY valid JSON, no additional text or explanation
+CRITICAL PARSING INSTRUCTIONS:
+1. Extract ALL information present in the resume text, regardless of formatting inconsistencies
+2. If a field is not found, use null or empty array as appropriate - never use placeholder text
+3. For experience and education, include ALL entries found, even if incomplete
+4. Skills should be comprehensive - include technical skills, programming languages, frameworks, tools, soft skills, and domain expertise
+5. Preserve exact dates, company names, and titles as written - do not modify or standardize
+6. Return ONLY valid JSON, no additional text, explanation, or markdown formatting
 7. If multiple sections exist for the same category, combine them intelligently
-8. Pay special attention to formatting variations and different section names
+8. Pay special attention to formatting variations and different section names (e.g., "Work History", "Professional Experience", "Employment")
+9. Handle poorly formatted text by extracting partial information rather than failing completely
+10. For experience descriptions, capture key achievements and responsibilities even if grammar is imperfect
+11. Extract contact information from headers, footers, or contact sections regardless of position
+12. Handle multi-column layouts by processing text in logical reading order
+13. If name appears in email address format (e.g., john.doe@company.com), extract "John Doe" as the name
+14. For skills, include both explicit skill lists and skills mentioned within job descriptions
+15. Extract years, dates, and durations in their original format - include ranges like "2020-2023" or "Jan 2020 - Present"
+
+QUALITY ASSURANCE:
+- Validate that extracted JSON is properly formatted before returning
+- Ensure arrays contain objects with consistent field structures
+- If extraction quality is poor due to document formatting, prioritize the most important fields (name, email, experience, skills)
+- Never return empty strings for missing data - use null or omit the field entirely
 
 Resume text to parse:
 `;
@@ -229,29 +242,108 @@ return {
     return JSON.parse(responseContent);
   },
 
-  async extractWithGoogle(text, apiKey, config) {
-    const response = await axios.post(
-      `${config.baseURL}/models/${config.model}:generateContent?key=${apiKey}`,
-      {
-        contents: [{
-          parts: [{
-            text: AI_EXTRACTION_PROMPT + text
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4000
+async extractWithGoogle(text, apiKey, config) {
+    const maxRetries = 2;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios.post(
+          `${config.baseURL}/models/${config.model}:generateContent?key=${apiKey}`,
+          {
+            contents: [{
+              parts: [{
+                text: AI_EXTRACTION_PROMPT + text
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 4000,
+              topP: 0.8,
+              topK: 40
+            },
+            safetySettings: [
+              {
+                category: "HARM_CATEGORY_HARASSMENT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_HATE_SPEECH", 
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold: "BLOCK_NONE"
+              }
+            ]
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'JobMatch-Pro/1.0'
+            },
+            timeout: 30000 // 30 second timeout
+          }
+        );
+
+        // Enhanced response validation
+        if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          throw new Error('Invalid response structure from Google Gemini API');
         }
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json'
+
+        const responseContent = response.data.candidates[0].content.parts[0].text.trim();
+        
+        // Remove markdown formatting if present
+        const cleanContent = responseContent.replace(/```json\s*|\s*```/g, '').trim();
+        
+        // Validate JSON before parsing
+        let parsedData;
+        try {
+          parsedData = JSON.parse(cleanContent);
+        } catch (parseError) {
+          throw new Error(`Invalid JSON response from Gemini: ${parseError.message}`);
+        }
+
+        // Validate the structure of parsed data
+        if (typeof parsedData !== 'object' || parsedData === null) {
+          throw new Error('Gemini returned invalid data structure');
+        }
+
+        return parsedData;
+
+      } catch (error) {
+        lastError = error;
+        console.warn(`Google Gemini extraction attempt ${attempt} failed:`, error.message);
+
+        // Check for specific error types that shouldn't be retried
+        if (error.response?.status === 401) {
+          throw new Error('Invalid Google API key. Please check your API key and try again.');
+        }
+        if (error.response?.status === 403) {
+          throw new Error('Google API access denied. Please check your API key permissions.');
+        }
+        if (error.response?.status === 429) {
+          // Rate limit - wait before retry
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            continue;
+          }
+          throw new Error('Google API rate limit exceeded. Please try again later.');
+        }
+
+        // For other errors, retry if attempts remain
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
       }
-    );
+    }
 
-    const responseContent = response.data.candidates[0].content.parts[0].text.trim();
-    return JSON.parse(responseContent);
+    // If all retries failed
+    throw new Error(`Google Gemini extraction failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
   },
 
   async extractWithOpenRouter(text, apiKey, config) {
@@ -373,26 +465,81 @@ return {
         imported_at: new Date().toISOString()
       };
       let aiExtractionUsed = false;
-      try {
-        // Load PDF document using PDF.js
-        const pdfDocument = await pdfjsLib.getDocument({ data: fileContent }).promise;
+try {
+        // Load PDF document using PDF.js with enhanced error handling
+        const pdfDocument = await pdfjsLib.getDocument({ 
+          data: fileContent,
+          verbosity: 0, // Reduce PDF.js console output
+          standardFontDataUrl: new URL('pdfjs-dist/standard_fonts', import.meta.url).toString()
+        }).promise;
+        
         pageCount = pdfDocument.numPages;
+        console.log(`Processing PDF with ${pageCount} pages...`);
 
-        // Extract text from each page
-        const textPromises = [];
+        // Extract text from each page with individual error handling
+        const pageTexts = [];
+        const failedPages = [];
+        
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-          textPromises.push(
-            pdfDocument.getPage(pageNum).then(page => 
-              page.getTextContent().then(textContent => 
-                textContent.items.map(item => item.str).join(' ')
-              )
-            )
-          );
+          try {
+            const page = await pdfDocument.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            
+            // Enhanced text extraction with positioning and formatting
+            const pageText = textContent.items
+              .map(item => {
+                // Preserve some spatial relationships
+                const text = item.str;
+                if (item.hasEOL) {
+                  return text + '\n';
+                }
+                return text + ' ';
+              })
+              .join('')
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim();
+            
+            if (pageText.length > 10) { // Only include pages with meaningful content
+              pageTexts.push(`--- Page ${pageNum} ---\n${pageText}`);
+            } else {
+              failedPages.push(pageNum);
+            }
+            
+          } catch (pageError) {
+            console.warn(`Failed to extract text from page ${pageNum}:`, pageError);
+            failedPages.push(pageNum);
+            extractionErrors.push(`Page ${pageNum} extraction failed: ${pageError.message}`);
+          }
         }
 
-        const pageTexts = await Promise.all(textPromises);
+        // Combine all successfully extracted page texts
         extractedText = pageTexts.join('\n\n');
+        
+        if (failedPages.length > 0) {
+          console.warn(`Failed to extract text from ${failedPages.length} pages: ${failedPages.join(', ')}`);
+        }
 
+        // Validate text quality
+        if (!extractedText.trim()) {
+          throw new Error('No text content found in PDF. The file may be image-based, corrupted, or password-protected.');
+        }
+        
+        if (extractedText.length < 50) {
+          extractionErrors.push('Very little text content extracted - PDF may be image-based or poorly formatted');
+        }
+
+        // Text quality assessment
+        const textQuality = {
+          totalLength: extractedText.length,
+          wordCount: extractedText.split(/\s+/).length,
+          hasEmail: /@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(extractedText),
+          hasPhonePattern: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(extractedText),
+          hasDatePattern: /\b\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(extractedText),
+          successfulPages: pageTexts.length,
+          failedPages: failedPages.length
+        };
+        
+        console.log('PDF text extraction quality assessment:', textQuality);
         if (!extractedText.trim()) {
           throw new Error('No text content found in PDF. The file may be image-based or corrupted.');
         }
@@ -403,29 +550,64 @@ return {
             console.log(`Attempting AI extraction with ${apiSettings.apiService}...`);
             const aiData = await this.extractWithAI(extractedText, apiSettings.apiKey, apiSettings.apiService);
             
-            if (aiData) {
-              // Map AI extracted data to our format
+            if (aiData && typeof aiData === 'object') {
+              // Validate and map AI extracted data to our format
               extractedData = {
-                name: aiData.name || '',
-                email: aiData.email || '',
-                experience: Array.isArray(aiData.experience) ? aiData.experience : [],
-                education: Array.isArray(aiData.education) ? aiData.education : [],
-                skills: Array.isArray(aiData.skills) ? aiData.skills : [],
+                name: (aiData.name && typeof aiData.name === 'string' && aiData.name.trim()) ? aiData.name.trim() : '',
+                email: (aiData.email && typeof aiData.email === 'string' && aiData.email.includes('@')) ? aiData.email.trim() : '',
+                experience: Array.isArray(aiData.experience) ? aiData.experience.filter(exp => 
+                  exp && typeof exp === 'object' && (exp.title || exp.company)
+                ) : [],
+                education: Array.isArray(aiData.education) ? aiData.education.filter(edu => 
+                  edu && typeof edu === 'object' && (edu.degree || edu.institution)
+                ) : [],
+                skills: Array.isArray(aiData.skills) ? aiData.skills.filter(skill => 
+                  skill && typeof skill === 'string' && skill.trim().length > 1
+                ).map(skill => skill.trim()) : [],
                 imported_at: new Date().toISOString()
               };
               
-              aiExtractionUsed = true;
-              console.log('AI extraction successful:', {
-                name: extractedData.name ? 'Found' : 'Missing',
-                email: extractedData.email ? 'Found' : 'Missing',
-                experience: extractedData.experience.length,
-                education: extractedData.education.length,
-                skills: extractedData.skills.length
-              });
+              // Quality check - ensure we got meaningful data
+              const hasValidData = extractedData.name || extractedData.email || 
+                                 extractedData.experience.length > 0 || 
+                                 extractedData.education.length > 0 || 
+                                 extractedData.skills.length > 0;
+              
+              if (hasValidData) {
+                aiExtractionUsed = true;
+                console.log('AI extraction successful:', {
+                  name: extractedData.name ? 'Found' : 'Missing',
+                  email: extractedData.email ? 'Found' : 'Missing',
+                  experience: extractedData.experience.length,
+                  education: extractedData.education.length,
+                  skills: extractedData.skills.length,
+                  service: apiSettings.apiService
+                });
+                
+                // Add additional validation for extracted data quality
+                if (extractedData.experience.length === 0 && extractedText.toLowerCase().includes('experience')) {
+                  console.warn('AI found experience section but extracted no experience entries');
+                }
+                if (extractedData.skills.length === 0 && extractedText.toLowerCase().includes('skill')) {
+                  console.warn('AI found skills section but extracted no skills');
+                }
+              } else {
+                console.warn('AI extraction returned empty or invalid data, falling back to manual parsing');
+                extractionErrors.push('AI extraction returned no valid data');
+                aiExtractionUsed = false;
+              }
+            } else {
+              console.warn('AI extraction returned invalid data structure');
+              extractionErrors.push('AI extraction returned invalid data structure');
             }
           } catch (aiError) {
             console.warn('AI extraction failed, falling back to manual parsing:', aiError);
-            extractionErrors.push(`AI extraction failed: ${aiError.message}`);
+            extractionErrors.push(`AI extraction failed (${apiSettings.apiService}): ${aiError.message}`);
+            
+            // Log specific error details for debugging
+            if (aiError.response?.data) {
+              console.error('AI API Error Response:', aiError.response.data);
+            }
           }
         }
 
@@ -610,35 +792,79 @@ return {
         });
       }
 
-// Validate that we have minimum required data - require at least one essential field
-// Allow extraction to proceed even if name and email are missing
-      // The UI will handle partial data gracefully and prompt user to review
-      
-      // Log what was found vs what was missing for better user feedback
-      const extractionSummary = {
-        found: [],
-        missing: []
-      };
-      
-      if (extractedData.name) extractionSummary.found.push('name');
-      else extractionSummary.missing.push('name');
-      
-      if (extractedData.email) extractionSummary.found.push('email');
-      else extractionSummary.missing.push('email');
-      
-      if (extractionSummary.missing.length > 0) {
-        console.warn(`PDF import partial success - Missing: ${extractionSummary.missing.join(', ')}, Found: ${extractionSummary.found.join(', ')}`);
-      }
-      
-      // Log what was successfully extracted for debugging
-      console.log('PDF extraction results:', {
-        name: extractedData.name ? 'Found' : 'Missing',
-        email: extractedData.email ? 'Found' : 'Missing',
-        experience: extractedData.experience.length,
-        education: extractedData.education.length,
-        skills: extractedData.skills.length
-      });
+// Comprehensive extraction quality assessment and validation
+        const extractionQuality = {
+          essential: {
+            name: !!extractedData.name,
+            email: !!extractedData.email
+          },
+          content: {
+            experience: extractedData.experience.length,
+            education: extractedData.education.length,
+            skills: extractedData.skills.length
+          },
+          metadata: {
+            aiUsed: aiExtractionUsed,
+            service: apiSettings.apiService,
+            textLength: extractedText.length,
+            pageCount: pageCount,
+            errorCount: extractionErrors.length
+          }
+        };
 
+        // Calculate overall extraction score
+        let extractionScore = 0;
+        if (extractedData.name) extractionScore += 30;
+        if (extractedData.email) extractionScore += 30;
+        if (extractedData.experience.length > 0) extractionScore += 20;
+        if (extractedData.education.length > 0) extractionScore += 10;
+        if (extractedData.skills.length > 0) extractionScore += 10;
+
+        extractionQuality.score = extractionScore;
+        extractionQuality.quality = extractionScore >= 80 ? 'excellent' : 
+                                   extractionScore >= 60 ? 'good' : 
+                                   extractionScore >= 40 ? 'fair' : 'poor';
+
+        // Log comprehensive extraction results
+        console.log('PDF extraction quality assessment:', extractionQuality);
+
+        // Provide specific feedback based on extraction results
+        const extractionSummary = {
+          found: [],
+          missing: [],
+          suggestions: []
+        };
+        
+        if (extractedData.name) extractionSummary.found.push('name');
+        else {
+          extractionSummary.missing.push('name');
+          extractionSummary.suggestions.push('Ensure your name appears prominently at the top of the resume');
+        }
+        
+        if (extractedData.email) extractionSummary.found.push('email');
+        else {
+          extractionSummary.missing.push('email');
+          extractionSummary.suggestions.push('Include your email address in the contact information section');
+        }
+
+        if (extractedData.experience.length === 0 && extractedText.toLowerCase().includes('experience')) {
+          extractionSummary.suggestions.push('Experience section detected but entries not extracted - ensure clear job titles and company names');
+        }
+
+        if (extractedData.skills.length === 0 && extractedText.toLowerCase().includes('skill')) {
+          extractionSummary.suggestions.push('Skills section detected but skills not extracted - use bullet points or comma-separated lists');
+        }
+
+        if (extractionQuality.score < 60) {
+          extractionSummary.suggestions.push('Consider using a more standard resume format for better AI extraction');
+        }
+        
+        if (extractionSummary.missing.length > 0) {
+          console.warn(`PDF import analysis - Missing: ${extractionSummary.missing.join(', ')}, Found: ${extractionSummary.found.join(', ')}`);
+          if (extractionSummary.suggestions.length > 0) {
+            console.info('Extraction improvement suggestions:', extractionSummary.suggestions);
+          }
+        }
       // Check if profile exists
       const existingResponse = await apperClient.fetchRecords('user_profile', {
         fields: [{ field: { Name: "Id" } }],
