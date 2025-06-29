@@ -763,13 +763,12 @@ const responseContent = response.data.choices[0].message.content.trim();
       }
     }
 
-    const errorMessage = `Google Gemini PDF extraction failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`;
+const errorMessage = `Google Gemini PDF extraction failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`;
     console.error(errorMessage);
     throw new Error(errorMessage);
   },
-  },
 
-async importResume(file) {
+  async importResume(file) {
     try {
       const { ApperClient } = window.ApperSDK;
       const apperClient = new ApperClient({
