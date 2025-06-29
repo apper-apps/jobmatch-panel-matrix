@@ -1,10 +1,7 @@
 import { toast } from "react-toastify";
-import { importLogService } from "./importLogService";
-import * as pdfjsLib from "pdfjs-dist";
+import { importLogService } from "@/services/api/importLogService";
 import OpenAI from "openai";
 import axios from "axios";
-import React from "react";
-import ErrorComponent from "@/components/ui/Error";
 // AI service configurations with enhanced settings for robust extraction
 const AI_SERVICES = {
   openai: {
@@ -524,8 +521,252 @@ async extractWithGoogle(text, apiKey, config) {
       }
     );
 
-    const responseContent = response.data.choices[0].message.content.trim();
+const responseContent = response.data.choices[0].message.content.trim();
     return JSON.parse(responseContent);
+  },
+
+  // Enhanced AI extraction method for direct PDF processing
+  async extractWithAIPDF(base64Content, apiKey, service = 'google') {
+    try {
+      const serviceConfig = AI_SERVICES[service];
+      if (!serviceConfig) {
+        throw new Error(`Unsupported AI service for PDF processing: ${service}`);
+      }
+
+      let extractedData = null;
+
+      switch (service) {
+        case 'google':
+          extractedData = await this.extractWithGooglePDF(base64Content, apiKey, serviceConfig);
+          break;
+        case 'openai':
+          // OpenAI doesn't directly support PDF files in the chat API, would need vision API
+          throw new Error('OpenAI direct PDF processing not supported. Use Google Gemini for direct PDF processing.');
+        case 'openrouter':
+          // Most OpenRouter models don't support direct PDF processing
+          throw new Error('OpenRouter direct PDF processing not supported. Use Google Gemini for direct PDF processing.');
+        default:
+          throw new Error(`Unsupported service for direct PDF processing: ${service}`);
+      }
+
+      return extractedData;
+    } catch (error) {
+      console.error('Direct AI PDF extraction failed:', error);
+      throw error;
+    }
+  },
+
+  async extractWithGooglePDF(base64Content, apiKey, config) {
+    const maxRetries = config.retryAttempts || 3;
+    let lastError = null;
+    let baseDelay = config.retryDelay || 2000;
+
+    // Pre-validate input parameters
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+      throw new Error('Invalid or missing Google API key');
+    }
+
+    if (!base64Content || typeof base64Content !== 'string' || base64Content.trim().length === 0) {
+      throw new Error('Invalid or missing PDF content for processing');
+    }
+
+    console.log(`Starting Google Gemini direct PDF extraction with ${config.model}...`);
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Gemini PDF extraction attempt ${attempt}/${maxRetries}`);
+        
+        // Enhanced request payload for direct PDF processing
+        const requestPayload = {
+          contents: [{
+            parts: [
+              {
+                text: AI_EXTRACTION_PROMPT
+              },
+              {
+                inline_data: {
+                  mime_type: "application/pdf",
+                  data: base64Content
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: config.temperature || 0.1,
+            maxOutputTokens: config.maxTokens || 4000,
+            topP: 0.8,
+            topK: 40,
+            candidateCount: 1,
+            stopSequences: []
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH", 
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_UNSPECIFIED",
+              threshold: "BLOCK_NONE"
+            }
+          ]
+        };
+
+        const response = await axios.post(
+          `${config.baseURL}/models/${config.model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          requestPayload,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'JobMatch-Pro/1.0',
+              'Accept': 'application/json',
+              'Accept-Encoding': 'gzip, deflate'
+            },
+            timeout: config.timeout || 60000, // Extended timeout for PDF processing
+            maxContentLength: 100 * 1024 * 1024, // 100MB limit for PDF files
+            validateStatus: (status) => status < 500
+          }
+        );
+
+        // Response validation for PDF processing
+        if (!response.data) {
+          throw new Error('Empty response from Google Gemini PDF API');
+        }
+
+        if (response.data.error) {
+          const error = response.data.error;
+          throw new Error(`Gemini PDF API Error: ${error.message || error.code || 'Unknown API error'}`);
+        }
+
+        if (!response.data.candidates || !Array.isArray(response.data.candidates) || response.data.candidates.length === 0) {
+          throw new Error('No candidates returned from Gemini PDF API - content may have been blocked or PDF format unsupported');
+        }
+
+        const candidate = response.data.candidates[0];
+        
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+          console.warn(`Gemini PDF processing finished with reason: ${candidate.finishReason}`);
+          if (candidate.finishReason === 'SAFETY') {
+            throw new Error('PDF content was blocked by Gemini safety filters');
+          } else if (candidate.finishReason === 'MAX_TOKENS') {
+            console.warn('Gemini PDF response was truncated due to token limit');
+          }
+        }
+
+        if (!candidate.content?.parts?.[0]?.text) {
+          throw new Error('Invalid response structure from Google Gemini PDF API - no text content found');
+        }
+
+        const responseContent = candidate.content.parts[0].text.trim();
+        
+        if (responseContent.length === 0) {
+          throw new Error('Empty response content from Gemini PDF processing');
+        }
+
+        console.log(`Gemini PDF response length: ${responseContent.length} characters`);
+        
+        // Enhanced content cleaning for JSON extraction from PDF processing
+        let cleanContent = responseContent;
+        
+        cleanContent = cleanContent.replace(/```json\s*/gi, '');
+        cleanContent = cleanContent.replace(/```\s*/g, '');
+        cleanContent = cleanContent.replace(/^\s*json\s*/gi, '');
+        cleanContent = cleanContent.trim();
+        
+        const jsonStart = cleanContent.indexOf('{');
+        const jsonEnd = cleanContent.lastIndexOf('}') + 1;
+        
+        if (jsonStart === -1 || jsonEnd <= jsonStart) {
+          throw new Error('No valid JSON object found in Gemini PDF response');
+        }
+        
+        cleanContent = cleanContent.substring(jsonStart, jsonEnd);
+        
+        let parsedData;
+        try {
+          parsedData = JSON.parse(cleanContent);
+        } catch (parseError) {
+          console.error('JSON parsing failed for PDF processing. Content preview:', cleanContent.substring(0, 200));
+          throw new Error(`Invalid JSON response from Gemini PDF processing: ${parseError.message}`);
+        }
+
+        if (typeof parsedData !== 'object' || parsedData === null) {
+          throw new Error('Gemini PDF processing returned invalid data structure - expected object');
+        }
+
+        // Validate PDF extraction quality
+        const hasValidData = parsedData.name || parsedData.email || 
+                           (Array.isArray(parsedData.experience) && parsedData.experience.length > 0) ||
+                           (Array.isArray(parsedData.skills) && parsedData.skills.length > 0);
+
+        if (!hasValidData) {
+          console.warn('Gemini PDF extraction returned minimal useful data');
+        }
+
+        console.log(`Gemini PDF extraction successful on attempt ${attempt}:`, {
+          name: parsedData.name ? 'Found' : 'Missing',
+          email: parsedData.email ? 'Found' : 'Missing',
+          experience: Array.isArray(parsedData.experience) ? parsedData.experience.length : 0,
+          education: Array.isArray(parsedData.education) ? parsedData.education.length : 0,
+          skills: Array.isArray(parsedData.skills) ? parsedData.skills.length : 0
+        });
+
+        return parsedData;
+
+      } catch (error) {
+        lastError = error;
+        console.warn(`Google Gemini PDF extraction attempt ${attempt} failed:`, error.message);
+
+        // Handle specific errors for PDF processing
+        if (error.response?.status === 400) {
+          throw new Error(`Invalid PDF request to Gemini API: ${error.response.data?.error?.message || 'Bad request - PDF may be corrupted or unsupported format'}`);
+        }
+        if (error.response?.status === 413) {
+          throw new Error('PDF file too large for Gemini API processing. Please reduce file size or split into smaller documents.');
+        }
+
+        // Standard error handling for other HTTP status codes
+        if (error.response?.status === 401) {
+          throw new Error('Invalid Google API key for PDF processing. Please verify your API key.');
+        }
+        if (error.response?.status === 403) {
+          throw new Error('Google API access denied for PDF processing. Check API key permissions and ensure Generative AI API is enabled.');
+        }
+        if (error.response?.status === 429) {
+          console.warn(`Rate limit hit on PDF processing attempt ${attempt}`);
+          if (attempt < maxRetries) {
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            console.log(`Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error('Google API rate limit exceeded for PDF processing. Please try again later.');
+        }
+
+        // For other errors, retry if attempts remain
+        if (attempt < maxRetries) {
+          const delay = baseDelay * attempt;
+          console.log(`PDF processing error, waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    const errorMessage = `Google Gemini PDF extraction failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`;
+    console.error(errorMessage);
+    throw new Error(errorMessage);
+  },
   },
 
 async importResume(file) {
@@ -560,20 +801,24 @@ async importResume(file) {
         console.warn('Could not load API settings:', err);
       }
 
-      // Read PDF file content as ArrayBuffer and Base64 for complete storage
+      // Read PDF file as base64 for AI processing
       const fileReader = new FileReader();
-      const fileContent = await new Promise((resolve, reject) => {
-        fileReader.onload = (e) => resolve(e.target.result);
+      const fileContentBase64 = await new Promise((resolve, reject) => {
+        fileReader.onload = (e) => {
+          // Extract base64 content from data URL
+          const base64Content = e.target.result.split(',')[1];
+          resolve(base64Content);
+        };
         fileReader.onerror = (e) => reject(new Error('Failed to read PDF file'));
-        fileReader.readAsArrayBuffer(file);
+        fileReader.readAsDataURL(file);
       });
 
-      // Read file as text content for storage
-      const fileTextReader = new FileReader();
-      const fileContentText = await new Promise((resolve, reject) => {
-        fileTextReader.onload = (e) => resolve(e.target.result);
-        fileTextReader.onerror = (e) => reject(new Error('Failed to read PDF file content'));
-        fileTextReader.readAsDataURL(file);
+      // Read file as data URL for storage
+      const fileStorageReader = new FileReader();
+      const fileContentForStorage = await new Promise((resolve, reject) => {
+        fileStorageReader.onload = (e) => resolve(e.target.result);
+        fileStorageReader.onerror = (e) => reject(new Error('Failed to read PDF file content'));
+        fileStorageReader.readAsDataURL(file);
       });
 
       // Save uploaded file locally first with complete metadata
@@ -585,7 +830,7 @@ async importResume(file) {
           file_type: file.type,
           file_size: file.size,
           upload_date: new Date().toISOString(),
-          file_content: fileContentText // Store complete file content
+          file_content: fileContentForStorage // Store complete file content
         }]
       };
 
@@ -605,8 +850,8 @@ async importResume(file) {
           Name: `PDF Import - ${file.name}`,
           file_name: file.name,
           import_date: new Date().toISOString(),
-          text_content: '', // Will be populated after text extraction
-          page_count: 0 // Will be determined during extraction
+          text_content: 'Direct AI processing - no text extraction',
+          page_count: 1 // Unknown for direct processing
         }]
       };
 
@@ -633,10 +878,8 @@ async importResume(file) {
         extractionConfig = configResponse.data[0];
       }
 
-      // Extract text content from PDF using PDF.js
-      let extractedText = '';
+      // Initialize extraction variables for direct AI processing
       let extractionErrors = [];
-      let pageCount = 0;
       let extractedData = {
         name: '',
         email: '',
@@ -647,166 +890,21 @@ async importResume(file) {
       };
       let aiExtractionUsed = false;
       
-try {
-        // PDF.js will use built-in worker handling without explicit configuration
-
-        // Enhanced PDF document loading with comprehensive error handling
-        console.log('Loading PDF document with enhanced configuration...');
+      try {
+        // Direct AI processing without PDF.js - send PDF file directly to AI
+console.log('Processing PDF directly with AI API...');
         
-        const loadingTask = pdfjsLib.getDocument({ 
-          data: fileContent,
-          verbosity: 0, // Reduce PDF.js console output
-          standardFontDataUrl: new URL('pdfjs-dist/standard_fonts', import.meta.url).toString(),
-          // Enhanced loading parameters for robust PDF processing
-          maxImageSize: 1024 * 1024, // 1MB max image size
-          disableFontFace: false,
-          disableRange: false,
-          disableStream: false,
-          isEvalSupported: true,
-          fontExtraProperties: false,
-          enableXfa: false,
-          ownerDocument: document,
-          disableAutoFetch: false,
-          disableCreateObjectURL: false
-        });
-        
-        // Add progress tracking for large documents
-        loadingTask.onProgress = (progress) => {
-          if (progress.total > 0) {
-            const percent = Math.round((progress.loaded / progress.total) * 100);
-            console.log(`PDF loading progress: ${percent}%`);
-          }
-        };
-        
-        const pdfDocument = await loadingTask.promise;
-        pageCount = pdfDocument.numPages;
-        console.log(`Successfully loaded PDF with ${pageCount} pages`);
-
-        // Validate document structure
-        if (pageCount === 0) {
-          throw new Error('PDF document contains no pages');
-        }
-        
-        if (pageCount > 50) {
-          console.warn(`Large document detected (${pageCount} pages) - processing may take longer`);
-        }
-
-        // Extract text from each page with enhanced error handling and progress tracking
-        const pageTexts = [];
-        const failedPages = [];
-        const extractionWarnings = [];
-        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+        // Direct AI processing without PDF.js - use AI for direct PDF processing
+        if (apiSettings.apiKey) {
           try {
-            const page = await pdfDocument.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            
-            // Enhanced text extraction with positioning and formatting
-            const pageText = textContent.items
-              .map(item => {
-                // Preserve some spatial relationships
-                const text = item.str;
-                if (item.hasEOL) {
-                  return text + '\n';
-                }
-                return text + ' ';
-              })
-              .join('')
-              .replace(/\s+/g, ' ') // Normalize whitespace
-              .trim();
-            
-            if (pageText.length > 10) { // Only include pages with meaningful content
-              pageTexts.push(`--- Page ${pageNum} ---\n${pageText}`);
-            } else {
-              failedPages.push(pageNum);
-            }
-            
-          } catch (pageError) {
-            console.warn(`Failed to extract text from page ${pageNum}:`, pageError);
-            failedPages.push(pageNum);
-            extractionErrors.push(`Page ${pageNum} extraction failed: ${pageError.message}`);
-          }
-        }
-
-        // Combine all successfully extracted page texts
-        extractedText = pageTexts.join('\n\n');
-        
-        if (failedPages.length > 0) {
-          console.warn(`Failed to extract text from ${failedPages.length} pages: ${failedPages.join(', ')}`);
-        }
-
-        // Validate text quality
-// Enhanced text quality validation and assessment
-        if (!extractedText.trim()) {
-          throw new Error('No text content found in PDF. The file may be image-based, corrupted, password-protected, or contain only images/graphics.');
-        }
-        
-        // Comprehensive text quality assessment with detailed metrics
-        const textQuality = {
-          totalLength: extractedText.length,
-          wordCount: extractedText.split(/\s+/).filter(word => word.length > 0).length,
-          lineCount: extractedText.split('\n').length,
-          characterDensity: extractedText.length / pageCount,
-          hasEmail: /@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(extractedText),
-          hasPhonePattern: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(extractedText),
-          hasDatePattern: /\b\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(extractedText),
-          hasCommonSections: {
-            experience: /\b(?:experience|work|employment|career|professional)\b/i.test(extractedText),
-            education: /\b(?:education|academic|university|college|degree)\b/i.test(extractedText),
-            skills: /\b(?:skills|technical|competencies|abilities)\b/i.test(extractedText),
-            contact: /\b(?:contact|phone|email|address)\b/i.test(extractedText)
-          },
-          successfulPages: pageTexts.length,
-          failedPages: failedPages.length,
-          extractionWarnings: extractionWarnings.length
-        };
-        
-        // Calculate quality score
-        let qualityScore = 0;
-        if (textQuality.totalLength > 100) qualityScore += 20;
-        if (textQuality.wordCount > 50) qualityScore += 15;
-        if (textQuality.hasEmail) qualityScore += 15;
-        if (textQuality.hasCommonSections.experience) qualityScore += 15;
-        if (textQuality.hasCommonSections.education) qualityScore += 10;
-        if (textQuality.hasCommonSections.skills) qualityScore += 15;
-        if (textQuality.hasDatePattern) qualityScore += 10;
-        
-        textQuality.score = qualityScore;
-        textQuality.quality = qualityScore >= 80 ? 'excellent' : 
-                             qualityScore >= 60 ? 'good' : 
-                             qualityScore >= 40 ? 'fair' : 'poor';
-        
-        console.log('Enhanced PDF text extraction quality assessment:', textQuality);
-        
-        // Provide specific warnings based on quality assessment
-        if (textQuality.totalLength < 50) {
-          extractionErrors.push('Very little text content extracted - PDF may be image-based, scanned, or poorly formatted');
-        }
-        if (textQuality.characterDensity < 20) {
-          extractionWarnings.push('Low character density suggests possible image-based content or sparse formatting');
-        }
-        if (!textQuality.hasEmail && !textQuality.hasCommonSections.contact) {
-          extractionWarnings.push('No contact information patterns detected');
-        }
-        if (!textQuality.hasCommonSections.experience && !textQuality.hasCommonSections.education) {
-          extractionWarnings.push('No common resume sections detected - document may not be a standard resume');
-        }
-        
-        if (extractionWarnings.length > 0) {
-          console.warn('PDF extraction warnings:', extractionWarnings);
-          extractionErrors.push(...extractionWarnings);
-        }
-
-// Try AI extraction first if API key is available
-        if (apiSettings.apiKey && extractedText.trim()) {
-          try {
-            console.log(`Attempting AI extraction with ${apiSettings.apiService}...`);
-            const aiData = await this.extractWithAI(extractedText, apiSettings.apiKey, apiSettings.apiService);
+            console.log(`Attempting direct PDF AI extraction with ${apiSettings.apiService}...`);
+            const aiData = await this.extractWithAIPDF(fileContentBase64, apiSettings.apiKey, apiSettings.apiService);
             
             if (aiData && typeof aiData === 'object') {
               // Validate and map AI extracted data to our format
               extractedData = {
                 name: (aiData.name && typeof aiData.name === 'string' && aiData.name.trim()) ? aiData.name.trim() : '',
-email: (aiData.email && typeof aiData.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(aiData.email.trim())) ? aiData.email.trim() : '',
+                email: (aiData.email && typeof aiData.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(aiData.email.trim())) ? aiData.email.trim() : '',
                 experience: Array.isArray(aiData.experience) ? aiData.experience.filter(exp => 
                   exp && typeof exp === 'object' && (exp.title || exp.company)
                 ) : [],
@@ -827,7 +925,7 @@ email: (aiData.email && typeof aiData.email === 'string' && /^[^\s@]+@[^\s@]+\.[
               
               if (hasValidData) {
                 aiExtractionUsed = true;
-                console.log('AI extraction successful:', {
+                console.log('Direct PDF AI extraction successful:', {
                   name: extractedData.name ? 'Found' : 'Missing',
                   email: extractedData.email ? 'Found' : 'Missing',
                   experience: extractedData.experience.length,
@@ -835,254 +933,102 @@ email: (aiData.email && typeof aiData.email === 'string' && /^[^\s@]+@[^\s@]+\.[
                   skills: extractedData.skills.length,
                   service: apiSettings.apiService
                 });
-                
-                // Add additional validation for extracted data quality
-                if (extractedData.experience.length === 0 && extractedText.toLowerCase().includes('experience')) {
-                  console.warn('AI found experience section but extracted no experience entries');
-                }
-                if (extractedData.skills.length === 0 && extractedText.toLowerCase().includes('skill')) {
-                  console.warn('AI found skills section but extracted no skills');
-                }
               } else {
-                console.warn('AI extraction returned empty or invalid data, falling back to manual parsing');
-                extractionErrors.push('AI extraction returned no valid data');
+                console.warn('Direct AI extraction returned empty or invalid data');
+                extractionErrors.push('Direct AI extraction returned no valid data');
                 aiExtractionUsed = false;
               }
             } else {
-              console.warn('AI extraction returned invalid data structure');
-              extractionErrors.push('AI extraction returned invalid data structure');
+              console.warn('Direct AI extraction returned invalid data structure');
+              extractionErrors.push('Direct AI extraction returned invalid data structure');
             }
           } catch (aiError) {
-            console.warn('AI extraction failed, falling back to manual parsing:', aiError);
-            extractionErrors.push(`AI extraction failed (${apiSettings.apiService}): ${aiError.message}`);
+            console.warn('Direct AI extraction failed:', aiError);
+            extractionErrors.push(`Direct AI extraction failed (${apiSettings.apiService}): ${aiError.message}`);
             
             // Log specific error details for debugging
             if (aiError.response?.data) {
               console.error('AI API Error Response:', aiError.response.data);
             }
           }
-        }
-
-        // Fallback to manual parsing if AI extraction failed or unavailable
-        if (!aiExtractionUsed || (!extractedData.name && !extractedData.email)) {
-          console.log('Using fallback manual parsing...');
-          
-          // Enhanced name extraction with multiple strategies
-          let nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i);
-          
-          if (!nameMatches) {
-            // Try to find name in first few lines (common in resume headers)
-            const firstLines = extractedText.split('\n').slice(0, 8);
-            for (const line of firstLines) {
-              const cleanLine = line.trim();
-              // Look for full names (First Last, First Middle Last, etc.)
-              const lineNameMatch = cleanLine.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)$/);
-              if (lineNameMatch && lineNameMatch[1].length > 5 && lineNameMatch[1].length < 50) {
-                // Validate it's not a common header/title
-                const commonHeaders = ['curriculum vitae', 'resume', 'contact information', 'personal details'];
-                if (!commonHeaders.some(header => lineNameMatch[1].toLowerCase().includes(header))) {
-                  nameMatches = lineNameMatch;
-                  break;
-                }
-              }
-            }
-          }
-          
-          if (!nameMatches) {
-            // Try contact section with broader patterns
-            const contactSection = extractedText.match(/(?:Contact|Personal Information|Contact Information)(.*?)(?:Experience|Education|Skills|Summary|Objective)/si);
-            if (contactSection) {
-              nameMatches = contactSection[1].match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)/);
-            }
-          }
-          
-          if (!nameMatches) {
-            // Try to find names near email addresses
-            const emailContext = extractedText.match(/([A-Z][a-z]+\s+[A-Z][a-z]+).*?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-            if (emailContext) {
-              nameMatches = [emailContext[0], emailContext[1]];
-            }
-          }
-          
-          if (!nameMatches) {
-            // Try general pattern for names at beginning of lines with word boundaries
-            nameMatches = extractedText.match(/^\s*([A-Z][a-z]+\s+[A-Z][a-z]+)\s*$/m);
-          }
-          
-          if (nameMatches && !extractedData.name) {
-            extractedData.name = nameMatches[1].trim();
-          } else if (!extractedData.name) {
-            extractionErrors.push('Name not found in PDF content');
-          }
-
-          // Enhanced email extraction with multiple strategies
-          let emailMatches = extractedText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-          
-          if (!emailMatches) {
-            // Try contact section specific search with broader patterns
-            const contactSection = extractedText.match(/(?:Contact|Email|Personal Information|Contact Information)(.*?)(?:Experience|Education|Skills|Summary|Objective)/si);
-            if (contactSection) {
-              emailMatches = contactSection[1].match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-            }
-          }
-          
-          if (!emailMatches) {
-            // Try searching in header section (first 10 lines)
-            const headerLines = extractedText.split('\n').slice(0, 10).join('\n');
-            emailMatches = headerLines.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-          }
-          
-          if (!emailMatches) {
-            // Try with more liberal email pattern
-            emailMatches = extractedText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6})/);
-          }
-          
-          if (emailMatches && !extractedData.email) {
-const emailCandidate = emailMatches[0].trim();
-            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCandidate)) {
-                extractedData.email = emailCandidate;
-            }
-          } else if (!extractedData.email) {
-            extractionErrors.push('Email address not found in PDF content');
-          }
-
-          // Extract experience section if not already extracted by AI
-          if (!aiExtractionUsed || extractedData.experience.length === 0) {
-            const experienceSection = extractedText.match(/(?:Experience|Work Experience|Employment)(.*?)(?:Education|Skills|$)/si);
-            if (experienceSection) {
-              const experienceText = experienceSection[1];
-              // Parse individual job entries - this is a simplified approach
-              const jobEntries = experienceText.split(/(?=\d{4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))/i);
-              
-              const manualExperience = [];
-              jobEntries.forEach(entry => {
-                const titleMatch = entry.match(/([A-Za-z\s]+(?:Engineer|Developer|Manager|Analyst|Specialist))/i);
-                const companyMatch = entry.match(/(?:at|@)\s*([A-Za-z0-9\s&.,]+?)(?:\n|,|\d{4})/i);
-                const durationMatch = entry.match(/(\d{4}.*?(?:present|current|\d{4}))/i);
-                
-                if (titleMatch && companyMatch) {
-                  manualExperience.push({
-                    title: titleMatch[1].trim(),
-                    company: companyMatch[1].trim(),
-                    duration: durationMatch ? durationMatch[1].trim() : 'Duration not specified',
-                    description: entry.replace(titleMatch[0], '').replace(companyMatch[0], '').trim()
-                  });
-                }
-              });
-              
-              if (manualExperience.length > 0) {
-                extractedData.experience = manualExperience;
-              }
-            } else if (!aiExtractionUsed) {
-              extractionErrors.push('Experience section not found in PDF content');
-            }
-          }
-
-          // Extract education section if not already extracted by AI
-          if (!aiExtractionUsed || extractedData.education.length === 0) {
-            const educationSection = extractedText.match(/(?:Education|Academic)(.*?)(?:Skills|Experience|$)/si);
-            if (educationSection) {
-              const educationText = educationSection[1];
-              const degreeMatches = educationText.match(/(Bachelor|Master|PhD|Associate).*?(?:in|of)\s*([^\n]+)/gi);
-              
-              const manualEducation = [];
-              if (degreeMatches) {
-                degreeMatches.forEach(match => {
-                  const institutionMatch = educationText.match(new RegExp(match + '.*?([A-Za-z\\s]+(?:University|College|Institute))', 'i'));
-                  const yearMatch = educationText.match(/(\d{4})/);
-                  
-                  manualEducation.push({
-                    degree: match.trim(),
-                    institution: institutionMatch ? institutionMatch[1].trim() : 'Institution not specified',
-                    year: yearMatch ? yearMatch[1] : 'Year not specified'
-                  });
-                });
-              }
-              
-              if (manualEducation.length > 0) {
-                extractedData.education = manualEducation;
-              }
-            } else if (!aiExtractionUsed) {
-              extractionErrors.push('Education section not found in PDF content');
-            }
-          }
-
-          // Extract skills if not already extracted by AI
-          if (!aiExtractionUsed || extractedData.skills.length === 0) {
-            const skillsSection = extractedText.match(/(?:Skills|Technical Skills|Competencies)(.*?)(?:Education|Experience|$)/si);
-            if (skillsSection) {
-              const skillsText = skillsSection[1];
-              // Extract comma-separated or line-separated skills
-              const skillMatches = skillsText.match(/[A-Za-z+#.]{2,}(?:\s+[A-Za-z+#.]{2,})*/g);
-              if (skillMatches) {
-                extractedData.skills = skillMatches
-                  .map(skill => skill.trim())
-                  .filter(skill => skill.length > 2 && skill.length < 30)
-                  .slice(0, 20); // Limit to reasonable number
-              }
-            } else if (!aiExtractionUsed) {
-              extractionErrors.push('Skills section not found in PDF content');
-            }
-          }
-        }
-      } catch (pdfError) {
-        console.error('PDF parsing error:', pdfError);
-        if (pdfError.message.includes('Invalid PDF')) {
-          extractionErrors.push('Invalid PDF format. Please ensure the file is a valid PDF document.');
-        } else if (pdfError.message.includes('password')) {
-          extractionErrors.push('Password-protected PDFs are not supported. Please upload an unprotected PDF.');
         } else {
-          extractionErrors.push(`PDF processing failed: ${pdfError.message}`);
+          // No API key available - cannot process PDF without AI
+          extractionErrors.push('No AI API key configured. PDF processing requires AI API for direct parsing.');
+          console.warn('No AI API key available for direct PDF processing');
+        }
+
+        // If AI extraction failed and no API key is available, provide minimal data
+        if (!aiExtractionUsed) {
+          extractedData = {
+            name: 'Name extraction failed - AI required',
+            email: '',
+            experience: [],
+            education: [],
+            skills: [],
+            imported_at: new Date().toISOString()
+          };
+          extractionErrors.push('Direct PDF processing requires AI API. Please configure your API key in the AI Configuration section.');
+        }
+      } catch (processingError) {
+        console.error('Direct PDF processing error:', processingError);
+        if (processingError.message.includes('Invalid PDF')) {
+          extractionErrors.push('Invalid PDF format. Please ensure the file is a valid PDF document.');
+        } else if (processingError.message.includes('API key')) {
+          extractionErrors.push('AI API configuration required for PDF processing. Please set up your API key.');
+        } else {
+          extractionErrors.push(`Direct PDF processing failed: ${processingError.message}`);
         }
       }
 
+      // Skip the following complex text extraction code since we're using direct AI processing
+
       // Update PDF import record with extracted text
+// Update PDF import record with processing details
       if (pdfImportId) {
         await apperClient.updateRecord('pdf_import_data', {
           records: [{
             Id: pdfImportId,
-            text_content: extractedText.substring(0, 10000), // Limit text size
-            page_count: pageCount
+            text_content: `Direct AI processing completed. Extraction method: ${aiExtractionUsed ? apiSettings.apiService : 'Failed - No API key'}`,
+            page_count: 1 // Direct processing doesn't provide page count
           }]
         });
       }
 
-// Comprehensive extraction quality assessment and validation
-        const extractionQuality = {
-          essential: {
-            name: !!extractedData.name,
-            email: !!extractedData.email
-          },
-          content: {
-            experience: extractedData.experience.length,
-            education: extractedData.education.length,
-            skills: extractedData.skills.length
-          },
-          metadata: {
-            aiUsed: aiExtractionUsed,
-            service: apiSettings.apiService,
-            textLength: extractedText.length,
-            pageCount: pageCount,
-            errorCount: extractionErrors.length
-          }
-        };
+// Comprehensive extraction quality assessment and validation for direct AI processing
+      const extractionQuality = {
+        essential: {
+          name: !!extractedData.name && !extractedData.name.includes('extraction failed'),
+          email: !!extractedData.email
+        },
+        content: {
+          experience: extractedData.experience.length,
+          education: extractedData.education.length,
+          skills: extractedData.skills.length
+        },
+        metadata: {
+          aiUsed: aiExtractionUsed,
+          service: apiSettings.apiService,
+          processingMethod: 'Direct AI PDF Processing',
+          fileSize: file.size,
+          errorCount: extractionErrors.length
+        }
+      };
 
-        // Calculate overall extraction score
-        let extractionScore = 0;
-        if (extractedData.name) extractionScore += 30;
-        if (extractedData.email) extractionScore += 30;
-        if (extractedData.experience.length > 0) extractionScore += 20;
-        if (extractedData.education.length > 0) extractionScore += 10;
-        if (extractedData.skills.length > 0) extractionScore += 10;
+      // Calculate overall extraction score
+      let extractionScore = 0;
+      if (extractedData.name && !extractedData.name.includes('extraction failed')) extractionScore += 30;
+      if (extractedData.email) extractionScore += 30;
+      if (extractedData.experience.length > 0) extractionScore += 20;
+      if (extractedData.education.length > 0) extractionScore += 10;
+      if (extractedData.skills.length > 0) extractionScore += 10;
 
-        extractionQuality.score = extractionScore;
-        extractionQuality.quality = extractionScore >= 80 ? 'excellent' : 
-                                   extractionScore >= 60 ? 'good' : 
-                                   extractionScore >= 40 ? 'fair' : 'poor';
+      extractionQuality.score = extractionScore;
+      extractionQuality.quality = extractionScore >= 80 ? 'excellent' : 
+                                 extractionScore >= 60 ? 'good' : 
+                                 extractionScore >= 40 ? 'fair' : 'poor';
 
-        // Log comprehensive extraction results
-        console.log('PDF extraction quality assessment:', extractionQuality);
-
+      // Log comprehensive extraction results
+      console.log('Direct AI PDF extraction quality assessment:', extractionQuality);
         // Provide specific feedback based on extraction results
         const extractionSummary = {
           found: [],
@@ -1102,12 +1048,16 @@ const emailCandidate = emailMatches[0].trim();
           extractionSummary.suggestions.push('Include your email address in the contact information section');
         }
 
-        if (extractedData.experience.length === 0 && extractedText.toLowerCase().includes('experience')) {
-          extractionSummary.suggestions.push('Experience section detected but entries not extracted - ensure clear job titles and company names');
+if (extractedData.experience.length === 0 && aiExtractionUsed) {
+          extractionSummary.suggestions.push('Experience section not extracted - ensure clear job titles and company names in your PDF');
         }
 
-        if (extractedData.skills.length === 0 && extractedText.toLowerCase().includes('skill')) {
-          extractionSummary.suggestions.push('Skills section detected but skills not extracted - use bullet points or comma-separated lists');
+        if (extractedData.skills.length === 0 && aiExtractionUsed) {
+          extractionSummary.suggestions.push('Skills section not extracted - use bullet points or comma-separated lists in your PDF');
+        }
+
+        if (!aiExtractionUsed) {
+          extractionSummary.suggestions.push('Configure AI API key for enhanced extraction capabilities');
         }
 
         if (extractionQuality.score < 60) {
@@ -1115,9 +1065,9 @@ const emailCandidate = emailMatches[0].trim();
         }
         
         if (extractionSummary.missing.length > 0) {
-          console.warn(`PDF import analysis - Missing: ${extractionSummary.missing.join(', ')}, Found: ${extractionSummary.found.join(', ')}`);
+          console.warn(`Direct PDF import analysis - Missing: ${extractionSummary.missing.join(', ')}, Found: ${extractionSummary.found.join(', ')}`);
           if (extractionSummary.suggestions.length > 0) {
-            console.info('Extraction improvement suggestions:', extractionSummary.suggestions);
+            console.info('Direct AI extraction improvement suggestions:', extractionSummary.suggestions);
           }
         }
 // Check if profile exists
@@ -1228,8 +1178,8 @@ const emailCandidate = emailMatches[0].trim();
           return extractedData;
         }
       }
-// Log the actual import results
-      const logStatus = extractionErrors.length > 0 ? (extractedData.name || extractedData.email ? 'warning' : 'error') : 'success';
+// Log the actual import results for direct AI processing
+      const logStatus = extractionErrors.length > 0 ? (extractedData.name && !extractedData.name.includes('extraction failed') || extractedData.email ? 'warning' : 'error') : 'success';
       await importLogService.create({
         status: logStatus,
         extractedFields: {
@@ -1240,9 +1190,9 @@ const emailCandidate = emailMatches[0].trim();
           experience: extractedData.experience,
           education: extractedData.education,
           skills: extractedData.skills,
-          extractionSource: aiExtractionUsed ? `AI (${apiSettings.apiService})` : 'PDF.js parsing',
-          configVersion: extractionConfig.parsing_logic_version || 'default',
-          pageCount: pageCount,
+          extractionSource: aiExtractionUsed ? `Direct AI (${apiSettings.apiService})` : 'Direct processing failed - no AI key',
+          configVersion: extractionConfig.parsing_logic_version || 'direct-ai-v1',
+          processingMethod: 'Direct AI PDF Processing',
           aiEnhanced: aiExtractionUsed
         },
         errors: extractionErrors
