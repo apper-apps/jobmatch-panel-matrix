@@ -791,44 +791,148 @@ async extractWithGoogle(prompt, apiKey) {
         console.log(`Gemini job search response length: ${responseContent.length} characters`);
         
         // Enhanced JSON extraction for job board data
-        let cleanContent = responseContent;
+let cleanContent = responseContent;
         
-        // Remove various formatting patterns
-        cleanContent = cleanContent.replace(/```json\s*/gi, '');
-        cleanContent = cleanContent.replace(/```\s*/g, '');
-        cleanContent = cleanContent.replace(/^\s*json\s*/gi, '');
-        cleanContent = cleanContent.trim();
+        // Progressive content cleaning with multiple strategies
+        const cleaningStrategies = [
+          // Remove code block markers
+          (content) => content.replace(/```json\s*/gi, '').replace(/```\s*/g, ''),
+          // Remove language identifiers
+          (content) => content.replace(/^\s*json\s*/gi, '').replace(/^\s*javascript\s*/gi, ''),
+          // Remove common AI response prefixes
+          (content) => content.replace(/^Here\s+(is|are)\s+.*?:\s*/gi, '').replace(/^The\s+.*?:\s*/gi, ''),
+          // Remove trailing explanations
+          (content) => content.replace(/\n\n.*$/s, ''),
+          // Clean up whitespace
+          (content) => content.trim()
+        ];
         
-        // Find JSON array boundaries more robustly
-        const jsonStart = cleanContent.indexOf('[');
-        const jsonEnd = cleanContent.lastIndexOf(']') + 1;
-        
-        if (jsonStart === -1 || jsonEnd <= jsonStart) {
-          console.warn('No JSON array found, searching for object format...');
-          // Try to find single object format
-          const objStart = cleanContent.indexOf('{');
-          const objEnd = cleanContent.lastIndexOf('}') + 1;
-          if (objStart !== -1 && objEnd > objStart) {
-            cleanContent = '[' + cleanContent.substring(objStart, objEnd) + ']';
-          } else {
-            throw new Error('No valid JSON format found in job search response');
-          }
-        } else {
-          cleanContent = cleanContent.substring(jsonStart, jsonEnd);
+        // Apply all cleaning strategies
+        for (const strategy of cleaningStrategies) {
+          cleanContent = strategy(cleanContent);
         }
         
-        // Parse and validate job data
+        console.log('Cleaned content preview:', cleanContent.substring(0, 200));
+        
+        // Progressive JSON extraction strategies
+        const extractionStrategies = [
+          // Strategy 1: Direct array extraction
+          () => {
+            const jsonStart = cleanContent.indexOf('[');
+            const jsonEnd = cleanContent.lastIndexOf(']') + 1;
+            if (jsonStart !== -1 && jsonEnd > jsonStart) {
+              return cleanContent.substring(jsonStart, jsonEnd);
+            }
+            return null;
+          },
+          
+          // Strategy 2: Single object to array conversion
+          () => {
+            const objStart = cleanContent.indexOf('{');
+            const objEnd = cleanContent.lastIndexOf('}') + 1;
+            if (objStart !== -1 && objEnd > objStart) {
+              return '[' + cleanContent.substring(objStart, objEnd) + ']';
+            }
+            return null;
+          },
+          
+          // Strategy 3: Extract from JSON within text
+          () => {
+            const jsonMatch = cleanContent.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              return jsonMatch[0];
+            }
+            return null;
+          },
+          
+          // Strategy 4: Handle escaped JSON strings
+          () => {
+            try {
+              const unescaped = cleanContent.replace(/\\"/g, '"').replace(/\\n/g, '\n');
+              const jsonStart = unescaped.indexOf('[');
+              const jsonEnd = unescaped.lastIndexOf(']') + 1;
+              if (jsonStart !== -1 && jsonEnd > jsonStart) {
+                return unescaped.substring(jsonStart, jsonEnd);
+              }
+            } catch (e) {
+              console.warn('Unescaping strategy failed:', e.message);
+            }
+            return null;
+          },
+          
+          // Strategy 5: Try to extract from multiline response
+          () => {
+            const lines = cleanContent.split('\n').filter(line => line.trim());
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (line.startsWith('[') || line.startsWith('{')) {
+                const remainingLines = lines.slice(i).join('\n');
+                const arrayMatch = remainingLines.match(/\[[\s\S]*?\]/);
+                if (arrayMatch) {
+                  return arrayMatch[0];
+                }
+                const objMatch = remainingLines.match(/\{[\s\S]*?\}/);
+                if (objMatch) {
+                  return '[' + objMatch[0] + ']';
+                }
+              }
+            }
+            return null;
+          }
+        ];
+        
+        // Try each extraction strategy
+        let extractedJson = null;
+        for (let i = 0; i < extractionStrategies.length; i++) {
+          try {
+            extractedJson = extractionStrategies[i]();
+            if (extractedJson) {
+              console.log(`Extraction strategy ${i + 1} succeeded`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`Extraction strategy ${i + 1} failed:`, e.message);
+          }
+        }
+        
+        if (!extractedJson) {
+          console.error('All extraction strategies failed. Raw content:', cleanContent);
+          throw new Error('No valid JSON format found in job search response after trying all extraction strategies');
+        }
+        
+        // Parse and validate job data with enhanced error handling
         let jobData;
         try {
-          jobData = JSON.parse(cleanContent);
+          jobData = JSON.parse(extractedJson);
         } catch (parseError) {
-          console.error('Job data parsing failed. Content preview:', cleanContent.substring(0, 300));
-          throw new Error(`Invalid JSON in job search response: ${parseError.message}`);
+          console.error('JSON parsing failed. Extracted content:', extractedJson.substring(0, 500));
+          console.error('Parse error details:', parseError.message);
+          
+          // Try one more repair attempt for common JSON issues
+          try {
+            const repairedJson = extractedJson
+              .replace(/,\s*}/g, '}')  // Remove trailing commas in objects
+              .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+              .replace(/'/g, '"')      // Replace single quotes with double quotes
+              .replace(/(\w+):/g, '"$1":');  // Quote unquoted keys
+            
+            jobData = JSON.parse(repairedJson);
+            console.log('JSON repair attempt succeeded');
+          } catch (repairError) {
+            console.error('JSON repair attempt failed:', repairError.message);
+            throw new Error(`Invalid JSON in job search response: ${parseError.message}. Repair attempt also failed: ${repairError.message}`);
+          }
         }
 
-        // Validate job data structure
+        // Validate job data structure with enhanced feedback
         if (!Array.isArray(jobData)) {
-          throw new Error('Job search response is not an array');
+          if (typeof jobData === 'object' && jobData !== null) {
+            console.log('Converting single object to array');
+            jobData = [jobData];
+          } else {
+            console.error('Job data is not an array or object:', typeof jobData);
+            throw new Error('Job search response is not a valid data structure');
+          }
         }
 
         if (jobData.length === 0) {
@@ -836,20 +940,34 @@ async extractWithGoogle(prompt, apiKey) {
           return [];
         }
 
-        // Validate job objects
-        const validJobs = jobData.filter(job => {
-          return job && 
+        // Enhanced job validation with detailed logging
+        const validJobs = jobData.filter((job, index) => {
+          const isValid = job && 
                  typeof job === 'object' && 
                  job.title && 
                  job.company && 
                  job.location;
+          
+          if (!isValid) {
+            console.warn(`Job ${index} failed validation:`, {
+              hasJob: !!job,
+              isObject: typeof job === 'object',
+              hasTitle: !!(job && job.title),
+              hasCompany: !!(job && job.company),
+              hasLocation: !!(job && job.location),
+              jobData: job
+            });
+          }
+          
+          return isValid;
         });
 
         if (validJobs.length === 0) {
-          throw new Error('No valid job objects found in response');
+          console.error('No valid job objects found. Sample data:', jobData.slice(0, 2));
+          throw new Error('No valid job objects found in response - all jobs missing required fields (title, company, location)');
         }
 
-        console.log(`Successfully extracted ${validJobs.length} job opportunities from job boards`);
+        console.log(`Successfully extracted ${validJobs.length} job opportunities from ${jobData.length} total records`);
         
         // Enhance job data with search metadata
         const enhancedJobs = validJobs.map(job => ({
