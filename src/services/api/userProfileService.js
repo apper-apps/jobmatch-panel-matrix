@@ -1,6 +1,9 @@
 import { toast } from 'react-toastify';
 import { importLogService } from './importLogService';
+import * as pdfjsLib from 'pdfjs-dist';
 
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js`;
 export const userProfileService = {
   async getProfile() {
     try {
@@ -70,7 +73,12 @@ async importResume(file) {
         apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
       });
       
-      // Read PDF file content
+      // Validate file type
+      if (!file || file.type !== 'application/pdf') {
+        throw new Error('Please upload a valid PDF file');
+      }
+
+      // Read PDF file content as ArrayBuffer
       const fileReader = new FileReader();
       const fileContent = await new Promise((resolve, reject) => {
         fileReader.onload = (e) => resolve(e.target.result);
@@ -112,10 +120,10 @@ async importResume(file) {
         extractionConfig = configResponse.data[0];
       }
 
-      // Extract actual text content from PDF (simplified implementation)
-      // In production, this would use a proper PDF parsing library
+      // Extract text content from PDF using PDF.js
       let extractedText = '';
       let extractionErrors = [];
+      let pageCount = 0;
       let extractedData = {
         name: '',
         email: '',
@@ -126,12 +134,32 @@ async importResume(file) {
       };
 
       try {
-        // Basic text extraction simulation - replace with actual PDF parser
-        const decoder = new TextDecoder();
-        extractedText = decoder.decode(fileContent);
-        
+        // Load PDF document using PDF.js
+        const pdfDocument = await pdfjsLib.getDocument({ data: fileContent }).promise;
+        pageCount = pdfDocument.numPages;
+
+        // Extract text from each page
+        const textPromises = [];
+        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+          textPromises.push(
+            pdfDocument.getPage(pageNum).then(page => 
+              page.getTextContent().then(textContent => 
+                textContent.items.map(item => item.str).join(' ')
+              )
+            )
+          );
+        }
+
+        const pageTexts = await Promise.all(textPromises);
+        extractedText = pageTexts.join('\n\n');
+
+        if (!extractedText.trim()) {
+          throw new Error('No text content found in PDF. The file may be image-based or corrupted.');
+        }
+
         // Use actual parsing logic based on configuration
-        const nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i);
+        const nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i) ||
+                           extractedText.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)/m);
         if (nameMatches) {
           extractedData.name = nameMatches[1].trim();
         } else {
@@ -208,8 +236,15 @@ async importResume(file) {
           extractionErrors.push('Skills section not found in PDF content');
         }
 
-      } catch (textExtractionError) {
-        extractionErrors.push(`PDF text extraction failed: ${textExtractionError.message}`);
+      } catch (pdfError) {
+        console.error('PDF parsing error:', pdfError);
+        if (pdfError.message.includes('Invalid PDF')) {
+          extractionErrors.push('Invalid PDF format. Please ensure the file is a valid PDF document.');
+        } else if (pdfError.message.includes('password')) {
+          extractionErrors.push('Password-protected PDFs are not supported. Please upload an unprotected PDF.');
+        } else {
+          extractionErrors.push(`PDF processing failed: ${pdfError.message}`);
+        }
       }
 
       // Update PDF import record with extracted text
@@ -218,7 +253,7 @@ async importResume(file) {
           records: [{
             Id: pdfImportId,
             text_content: extractedText.substring(0, 10000), // Limit text size
-            page_count: 1 // Simplified - would calculate actual pages
+            page_count: pageCount
           }]
         });
       }
@@ -235,7 +270,7 @@ async importResume(file) {
       });
 
       const recordData = {
-Name: extractedData.name || 'Name not extracted',
+        Name: extractedData.name || 'Name not extracted',
         email: extractedData.email || '',
         experience: extractedData.experience.length > 0 ? JSON.stringify(extractedData.experience) : '',
         education: extractedData.education.length > 0 ? JSON.stringify(extractedData.education) : '',
@@ -296,8 +331,9 @@ Name: extractedData.name || 'Name not extracted',
           experience: extractedData.experience,
           education: extractedData.education,
           skills: extractedData.skills,
-          extractionSource: 'PDF parsing',
-          configVersion: extractionConfig.parsing_logic_version || 'default'
+          extractionSource: 'PDF.js parsing',
+          configVersion: extractionConfig.parsing_logic_version || 'default',
+          pageCount: pageCount
         },
         errors: extractionErrors
       });
@@ -305,7 +341,7 @@ Name: extractedData.name || 'Name not extracted',
       return extractedData;
     } catch (error) {
       console.error("Error importing resume:", error);
-      toast.error("Failed to import resume");
+      toast.error(`Error uploading file: ${error.message}`);
       
       // Log the failed import
       try {
