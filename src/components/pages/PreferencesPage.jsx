@@ -11,8 +11,9 @@ import ApperIcon from '@/components/ApperIcon';
 import { jobPreferencesService } from '@/services/api/jobPreferencesService';
 
 const PreferencesPage = () => {
-  const [preferences, setPreferences] = useState({
+const [preferences, setPreferences] = useState({
     minSalary: '',
+    currency: '',
     locations: [],
     jobTypes: [],
     workArrangements: [],
@@ -259,25 +260,43 @@ const addNegativeKeyword = () => {
               <h3 className="text-lg font-semibold text-gray-900">Salary Expectations</h3>
             </div>
             
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Base Annual Salary (Gross)"
-                type="number"
-                placeholder="e.g., 80000"
-                value={preferences.minSalary}
-                onChange={(e) => setPreferences(prev => ({ ...prev, minSalary: e.target.value }))}
-                icon="DollarSign"
-              />
-              <div className="flex items-end">
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
-                  <ApperIcon name="Info" size={16} className="inline mr-1 text-blue-600" />
-                  <div className="space-y-1">
-                    <div className="font-medium">Gross annual base salary</div>
-                    <div className="text-xs text-blue-600">
-                      • Before taxes and deductions<br/>
-                      • Excludes bonuses, equity, benefits<br/>
-                      • Upper limit open for negotiation
-                    </div>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <Input
+                  label="Base Annual Salary (Gross)"
+                  type="number"
+                  placeholder="e.g., 80000"
+                  value={preferences.minSalary}
+                  onChange={(e) => setPreferences(prev => ({ ...prev, minSalary: e.target.value }))}
+                  icon="DollarSign"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Currency
+                </label>
+                <select
+                  value={preferences.currency}
+                  onChange={(e) => setPreferences(prev => ({ ...prev, currency: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">Select Currency</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
+                <ApperIcon name="Info" size={16} className="inline mr-1 text-blue-600" />
+                <div className="space-y-1">
+                  <div className="font-medium">Gross annual base salary</div>
+                  <div className="text-xs text-blue-600">
+                    • Before taxes and deductions<br/>
+                    • Excludes bonuses, equity, benefits<br/>
+                    • Upper limit open for negotiation
                   </div>
                 </div>
               </div>

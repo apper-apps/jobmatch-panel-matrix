@@ -9,10 +9,11 @@ export const jobPreferencesService = {
         apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
       });
 
-      const params = {
+const params = {
         fields: [
           { field: { Name: "Name" } },
           { field: { Name: "min_salary" } },
+          { field: { Name: "currency1" } },
           { field: { Name: "locations" } },
           { field: { Name: "job_types" } },
           { field: { Name: "work_arrangements" } },
@@ -27,8 +28,9 @@ export const jobPreferencesService = {
       if (!response.success) {
         console.error(response.message);
         toast.error(response.message);
-        return {
+return {
           minSalary: '',
+          currency: '',
           locations: [],
           jobTypes: [],
           workArrangements: [],
@@ -39,8 +41,9 @@ export const jobPreferencesService = {
 
       const data = response.data?.[0];
       if (!data) {
-        return {
+return {
           minSalary: '',
+          currency: '',
           locations: [],
           jobTypes: [],
           workArrangements: [],
@@ -49,8 +52,9 @@ export const jobPreferencesService = {
         };
       }
 
-      return {
+return {
         minSalary: data.min_salary || '',
+        currency: data.currency1 || '',
         locations: data.locations ? data.locations.split('\n').filter(l => l.trim()) : [],
         jobTypes: data.job_types ? data.job_types.split(',').filter(t => t.trim()) : [],
         workArrangements: data.work_arrangements ? data.work_arrangements.split(',').filter(a => a.trim()) : [],
@@ -78,9 +82,10 @@ export const jobPreferencesService = {
         pagingInfo: { limit: 1, offset: 0 }
       });
 
-      const recordData = {
+const recordData = {
         Name: 'User Preferences',
         min_salary: preferences.minSalary || 0,
+        currency1: preferences.currency || '',
         locations: preferences.locations?.join('\n') || '',
         job_types: preferences.jobTypes?.join(',') || '',
         work_arrangements: preferences.workArrangements?.join(',') || '',
@@ -139,8 +144,9 @@ export const jobPreferencesService = {
 
   async resetPreferences() {
     try {
-      const defaultPreferences = {
+const defaultPreferences = {
         minSalary: '',
+        currency: '',
         locations: [],
         jobTypes: [],
         workArrangements: [],
