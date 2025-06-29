@@ -5,8 +5,8 @@ import OpenAI from "openai";
 import axios from "axios";
 import React from "react";
 import ErrorComponent from "@/components/ui/Error";
-// Configure PDF.js worker to use bundled worker file
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
+// Configure PDF.js worker to use CDN-hosted worker file
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
 // AI service configurations with enhanced settings for robust extraction
 const AI_SERVICES = {
   openai: {
