@@ -655,8 +655,8 @@ QUALITY ASSURANCE REQUIREMENTS:
       dangerouslyAllowBrowser: true
     });
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
       messages: [
         {
           role: "system",
@@ -688,8 +688,8 @@ async extractWithGoogle(prompt, apiKey) {
       try {
         console.log(`Gemini job search attempt ${attempt}/${maxRetries}`);
         
-        const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${encodeURIComponent(apiKey)}`,
           {
             contents: [{
               parts: [{
@@ -974,8 +974,8 @@ let cleanContent = responseContent;
     
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: 'meta-llama/llama-3.1-8b-instruct:free',
+{
+        model: 'anthropic/claude-3.5-sonnet',
         messages: [
           {
             role: "system",

@@ -13,10 +13,12 @@ import { jobMatchService } from "@/services/api/jobMatchService";
 
 const JobMatchesPage = () => {
   const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [aiSearching, setAiSearching] = useState(false);
   const [lastSearchType, setLastSearchType] = useState('manual');
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, jobId: null, jobTitle: '' });
+  const [selectedJobs, setSelectedJobs] = useState(new Set());
   const [filters, setFilters] = useState({
     search: '',
     minMatch: 80,
@@ -153,13 +155,56 @@ const handleSearch = (searchTerm) => {
     } catch (err) {
       setError('AI job discovery failed. Please check your AI configuration and try again.');
       console.error('AI discovery error:', err);
-    } finally {
+} finally {
       setAiSearching(false);
     }
   };
 
+  const handleDeleteJob = async (jobId) => {
+    try {
+      setLoading(true);
+      await jobMatchService.delete(jobId);
+      await loadJobs(); // Refresh the job list
+      setDeleteConfirm({ show: false, jobId: null, jobTitle: '' });
+    } catch (err) {
+      console.error('Error deleting job:', err);
+      setError('Failed to delete job. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedJobs.size === 0) return;
+    
+    try {
+      setLoading(true);
+      const deletePromises = Array.from(selectedJobs).map(jobId => 
+        jobMatchService.delete(jobId)
+      );
+      await Promise.all(deletePromises);
+      setSelectedJobs(new Set());
+      await loadJobs();
+    } catch (err) {
+      console.error('Error deleting jobs:', err);
+      setError('Failed to delete selected jobs. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const headerActions = (
-<div className="flex items-center gap-2">
+    <div className="flex items-center gap-2">
+      {selectedJobs.size > 0 && (
+        <Button
+          variant="danger"
+          icon="Trash2"
+          onClick={handleBulkDelete}
+          loading={loading}
+        >
+          Delete {selectedJobs.size} Selected
+        </Button>
+      )}
       <Button
         variant="secondary"
         icon="RefreshCw"
@@ -179,15 +224,14 @@ const handleSearch = (searchTerm) => {
       <Button
         variant="primary"
         icon="Filter"
+<Button
+        variant="primary"
+        icon="Filter"
       >
         Advanced Filters
       </Button>
     </div>
   );
-
-  if (loading) {
-    return (
-      <div className="h-full flex flex-col">
         <Header 
           title="Job Matches" 
           subtitle="Finding your perfect career opportunities"
@@ -338,7 +382,7 @@ return (
             onAction={() => lastSearchType === 'ai' || lastSearchType === 'discovery' ? handleSearch('') : handleAIJobDiscovery()}
           />
         ) : (
-          <motion.div
+<motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -351,12 +395,76 @@ return (
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
               >
-                <JobMatchCard job={job} />
+                <JobMatchCard 
+                  job={job} 
+                  onEdit={(jobId) => {
+                    // Navigate to edit page or open edit modal
+                    console.log('Edit job:', jobId);
+                  }}
+                  onDelete={(jobId, jobTitle) => {
+                    setDeleteConfirm({ 
+                      show: true, 
+                      jobId, 
+                      jobTitle 
+                    });
+                  }}
+                  selected={selectedJobs.has(job.Id)}
+                  onSelect={(jobId, selected) => {
+                    const newSelected = new Set(selectedJobs);
+                    if (selected) {
+                      newSelected.add(jobId);
+                    } else {
+                      newSelected.delete(jobId);
+                    }
+                    setSelectedJobs(newSelected);
+                  }}
+                />
               </motion.div>
             ))}
           </motion.div>
         )}
-      </div>
+
+        {/* Delete Confirmation Dialog */}
+        {deleteConfirm.show && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <ApperIcon name="AlertTriangle" size={24} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Job Match</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to delete "{deleteConfirm.jobTitle}"? This will permanently remove this job match from your list.
+              </p>
+              
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={() => setDeleteConfirm({ show: false, jobId: null, jobTitle: '' })}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  icon="Trash2"
+                  onClick={() => handleDeleteJob(deleteConfirm.jobId)}
+                  loading={loading}
+                >
+                  Delete Job
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
     </div>
   );
 };

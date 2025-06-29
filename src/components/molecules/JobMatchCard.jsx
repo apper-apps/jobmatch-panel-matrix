@@ -5,7 +5,7 @@ import Badge from '@/components/atoms/Badge';
 import Button from '@/components/atoms/Button';
 import ProgressRing from '@/components/atoms/ProgressRing';
 
-const JobMatchCard = ({ job, className = '' }) => {
+const JobMatchCard = ({ job, className = '', onEdit, onDelete, selected, onSelect }) => {
   const {
     title,
     company,
@@ -30,9 +30,18 @@ const JobMatchCard = ({ job, className = '' }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <div className="flex items-start justify-between mb-4">
+<div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3 flex-1">
-{logo ? (
+          {onSelect && (
+            <input
+              type="checkbox"
+              checked={selected || false}
+              onChange={(e) => onSelect(job.Id, e.target.checked)}
+              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+            />
+          )}
+          
+          {logo ? (
             <img 
               src={logo} 
               alt={`${company} logo`}
@@ -48,7 +57,6 @@ const JobMatchCard = ({ job, className = '' }) => {
           >
             <ApperIcon name="Building2" size={24} className="text-white" />
           </div>
-          )}
           
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 truncate">
@@ -61,7 +69,6 @@ const JobMatchCard = ({ job, className = '' }) => {
             </div>
           </div>
         </div>
-        
 <div className="flex gap-3">
           <ProgressRing
             percentage={profileMatch || profile_match || 0}
@@ -115,7 +122,7 @@ const JobMatchCard = ({ job, className = '' }) => {
           </div>
         </div>
         
-        <div className="flex gap-2">
+<div className="flex gap-2">
           <Button
             variant="secondary"
             size="sm"
@@ -124,13 +131,26 @@ const JobMatchCard = ({ job, className = '' }) => {
           >
             View Job
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            icon="Send"
-          >
-            Apply
-          </Button>
+          {onEdit && (
+            <Button
+              variant="accent"
+              size="sm"
+              icon="Edit"
+              onClick={() => onEdit(job.Id)}
+            >
+              Edit
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon="Trash2"
+              onClick={() => onDelete(job.Id, title)}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </div>
     </motion.div>
