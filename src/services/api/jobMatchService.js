@@ -466,10 +466,12 @@ QUALITY ASSURANCE CHECKLIST:
 CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
 CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
 `;
-  },
+},
+
+  buildJobDiscoveryPrompt(profile, preferences) {
     // Determine user's primary location and role for strict targeting
     const primaryLocation = preferences.locations && preferences.locations.length > 0 
-      ? preferences.locations[0] 
+      ? preferences.locations[0]
       : 'location preferences not set';
     
     const currentRole = profile.experience && profile.experience.length > 0 
