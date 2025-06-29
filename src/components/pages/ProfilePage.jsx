@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { toast } from 'react-toastify';
-import Header from '@/components/organisms/Header';
-import FileUpload from '@/components/molecules/FileUpload';
-import Button from '@/components/atoms/Button';
-import Badge from '@/components/atoms/Badge';
-import Loading from '@/components/ui/Loading';
-import Error from '@/components/ui/Error';
-import Empty from '@/components/ui/Empty';
-import ApperIcon from '@/components/ApperIcon';
-import { userProfileService } from '@/services/api/userProfileService';
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { toast } from "react-toastify";
+import ApperIcon from "@/components/ApperIcon";
+import Header from "@/components/organisms/Header";
+import Badge from "@/components/atoms/Badge";
+import Button from "@/components/atoms/Button";
+import FileUpload from "@/components/molecules/FileUpload";
+import Error from "@/components/ui/Error";
+import Empty from "@/components/ui/Empty";
+import Loading from "@/components/ui/Loading";
+import { userProfileService } from "@/services/api/userProfileService";
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState(null);
@@ -36,11 +36,70 @@ const ProfilePage = () => {
   }, []);
 
   const handleFileUpload = async (file) => {
+    if (!file) {
+      toast.error('Please select a file to upload.');
+      return;
+    }
+
+    if (!file.type.includes('pdf')) {
+      toast.error('Please select a PDF file.');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
     try {
-      setUploading(true);
-      const result = await userProfileService.importResume(file);
-      setProfile(result);
-      toast.success('Resume imported successfully!');
+      const data = await userProfileService.uploadResume(file);
+      
+      if (!data) {
+        throw new Error('No data received from upload');
+      }
+
+      // Parse extracted data with validation
+      let experience = [];
+      let education = [];
+      let skills = [];
+
+      try {
+        if (data.experience && data.experience.trim()) {
+          experience = JSON.parse(data.experience);
+          if (!Array.isArray(experience)) {
+            experience = [];
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse experience data:', e);
+        experience = [];
+      }
+
+      try {
+        if (data.education && data.education.trim()) {
+          education = JSON.parse(data.education);
+          if (!Array.isArray(education)) {
+            education = [];
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse education data:', e);
+        education = [];
+      }
+
+      if (data.skills && data.skills.trim()) {
+        skills = data.skills.split('\n').filter(s => s.trim()).slice(0, 50); // Limit skills
+      }
+
+      const profileData = {
+        name: data.Name || 'Name not available',
+        email: data.email || '',
+        experience,
+        education,
+        skills,
+        imported_at: data.imported_at
+      };
+
+      setProfile(profileData);
+      toast.success('Resume uploaded and processed successfully!');
     } catch (err) {
       toast.error('Failed to import resume. Please try again.');
       console.error('Error uploading file:', err);
@@ -207,22 +266,33 @@ subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
                 <ApperIcon name="Briefcase" size={20} className="text-primary-600" />
                 <h3 className="text-lg font-semibold text-gray-900">Experience</h3>
               </div>
-              
-              {profile.experience?.length > 0 ? (
+{profile.experience?.length > 0 ? (
                 <div className="space-y-4">
                   {profile.experience.map((exp, index) => (
                     <div key={index} className="border-l-2 border-primary-200 pl-4">
-                      <h4 className="font-semibold text-gray-900">{exp.title}</h4>
-                      <p className="text-primary-600 font-medium">{exp.company}</p>
-                      <p className="text-sm text-gray-500">{exp.duration}</p>
-                      {exp.description && (
+                      <h4 className="font-semibold text-gray-900">
+                        {exp.title || 'Position title not extracted'}
+                      </h4>
+                      <p className="text-primary-600 font-medium">
+                        {exp.company || 'Company not extracted'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {exp.duration || 'Duration not specified'}
+                      </p>
+                      {exp.description && exp.description.trim() && (
                         <p className="text-sm text-gray-600 mt-2">{exp.description}</p>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500">No experience data found</p>
+                <div className="text-center py-8">
+                  <ApperIcon name="AlertCircle" size={32} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-gray-500 font-medium">No experience data extracted from PDF</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Ensure your resume has a clearly labeled "Experience" section
+                  </p>
+                </div>
               )}
             </motion.div>
 
@@ -238,21 +308,36 @@ subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
                 <h3 className="text-lg font-semibold text-gray-900">Education</h3>
               </div>
               
-              {profile.education?.length > 0 ? (
+{profile.education?.length > 0 ? (
                 <div className="space-y-4">
                   {profile.education.map((edu, index) => (
                     <div key={index} className="border-l-2 border-secondary-200 pl-4">
-                      <h4 className="font-semibold text-gray-900">{edu.degree}</h4>
-                      <p className="text-secondary-600 font-medium">{edu.institution}</p>
-                      <p className="text-sm text-gray-500">{edu.year}</p>
+                      <h4 className="font-semibold text-gray-900">
+                        {edu.degree || 'Degree information not extracted'}
+                      </h4>
+                      <p className="text-secondary-600 font-medium">
+                        {edu.institution || 'Institution not extracted'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {edu.year || 'Year not specified'}
+                      </p>
                       {edu.gpa && (
                         <p className="text-sm text-gray-600">GPA: {edu.gpa}</p>
+                      )}
+                      {edu.honors && (
+                        <p className="text-sm text-gray-600">Honors: {edu.honors}</p>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500">No education data found</p>
+                <div className="text-center py-8">
+                  <ApperIcon name="AlertCircle" size={32} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-gray-500 font-medium">No education data extracted from PDF</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Ensure your resume has a clearly labeled "Education" section
+                  </p>
+                </div>
               )}
             </motion.div>
           </div>
@@ -269,21 +354,33 @@ subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
               <h3 className="text-lg font-semibold text-gray-900">Skills</h3>
             </div>
             
-            {profile.skills?.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {profile.skills.map((skill, index) => (
-                  <Badge
-                    key={index}
-                    variant="accent"
-                    size="md"
-                    className="cursor-pointer hover:bg-accent-200 transition-colors"
-                  >
-                    {skill}
-                  </Badge>
-                ))}
+{profile.skills?.length > 0 ? (
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  {profile.skills.map((skill, index) => (
+                    <Badge
+                      key={index}
+                      variant="accent"
+                      size="md"
+                      className="cursor-pointer hover:bg-accent-200 transition-colors"
+                      title={`Extracted from PDF: ${skill}`}
+                    >
+                      {skill}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  {profile.skills.length} skills extracted from your resume
+                </p>
               </div>
             ) : (
-              <p className="text-gray-500">No skills data found</p>
+              <div className="text-center py-8">
+                <ApperIcon name="AlertCircle" size={32} className="mx-auto text-gray-400 mb-2" />
+                <p className="text-gray-500 font-medium">No skills extracted from PDF</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Ensure your resume has a clearly labeled "Skills" section
+                </p>
+              </div>
             )}
           </motion.div>
         </div>
