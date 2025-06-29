@@ -27,33 +27,37 @@ const params = {
 
       const response = await apperClient.fetchRecords('job_preference', params);
       
-      if (!response.success) {
+if (!response.success) {
         console.error(response.message);
         toast.error(response.message);
-return {
+        // Return enhanced default preferences with location guidance
+        return {
           minSalary: '',
           currency: '',
           salaryType: '',
-          locations: [],
+          locations: [], // User should specify their actual location
           jobTypes: [],
           workArrangements: [],
           positiveKeywords: [],
-          negativeKeywords: []
+          negativeKeywords: [],
+          _needsLocationSetup: true // Flag for UI to prompt location setup
         };
       }
 
       const data = response.data?.[0];
-      if (!data) {
-return {
+if (!data) {
+        // Return default preferences with setup guidance
+        return {
           minSalary: '',
           currency: '',
           salaryType: '',
-          locations: [],
+          locations: [], // Critical: User must specify their location for proper job matching
           jobTypes: [],
           workArrangements: [],
           positiveKeywords: [],
-          negativeKeywords: []
-};
+          negativeKeywords: [],
+          _needsLocationSetup: true // Flag for UI to prompt proper location configuration
+        };
       }
 
       return {

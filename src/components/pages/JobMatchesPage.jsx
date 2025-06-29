@@ -42,20 +42,77 @@ const JobMatchesPage = () => {
     loadJobs();
   }, []);
 
-  const filteredJobs = jobs.filter(job => {
+const filteredJobs = jobs.filter(job => {
     const matchesSearch = filters.search === '' || 
       job.title.toLowerCase().includes(filters.search.toLowerCase()) ||
       job.company.toLowerCase().includes(filters.search.toLowerCase());
     
-const matchesMinMatch = (job.profile_match + job.preference_match) / 2 >= filters.minMatch;
+    const matchesMinMatch = (job.profile_match + job.preference_match) / 2 >= filters.minMatch;
     
-const matchesJobType = filters.jobType === 'all' || job.job_type === filters.jobType;
+    const matchesJobType = filters.jobType === 'all' || job.job_type === filters.jobType;
     
-const matchesWorkArrangement = filters.workArrangement === 'all' || 
+    const matchesWorkArrangement = filters.workArrangement === 'all' || 
       job.work_arrangement === filters.workArrangement;
 
-    return matchesSearch && matchesMinMatch && matchesJobType && matchesWorkArrangement;
+    // Enhanced geographic and role-based filtering to prevent mismatched jobs
+    const validateJobAlignment = (job) => {
+      // Check if job location contains common US indicators when user might be in Europe
+      const usLocationIndicators = ['USA', 'United States', ', NY', ', CA', ', TX', ', FL', ', WA', ', IL'];
+      const hasUSLocation = usLocationIndicators.some(indicator => 
+        job.location && job.location.includes(indicator)
+      );
+      
+      // Check if job title suggests developer role when user might be product manager
+      const developerTitles = ['Software Engineer', 'Developer', 'Frontend', 'Backend', 'Full Stack', 'Software Developer'];
+      const isDeveloperRole = developerTitles.some(title => 
+        job.title && job.title.toLowerCase().includes(title.toLowerCase())
+      );
+      
+      // If this looks like a potential mismatch, apply stricter filtering
+      if (hasUSLocation || isDeveloperRole) {
+        // Allow these jobs only if they have very high match scores (indicating AI validated them)
+        const averageMatch = (job.profile_match + job.preference_match) / 2;
+        return averageMatch >= 85; // Require higher threshold for potentially mismatched jobs
+      }
+      
+      return true; // Allow other jobs through normal filtering
+    };
+
+    const passesAlignmentCheck = validateJobAlignment(job);
+
+    return matchesSearch && matchesMinMatch && matchesJobType && matchesWorkArrangement && passesAlignmentCheck;
   });
+
+  // Add profile mismatch detection and user feedback
+  const detectProfileMismatch = () => {
+    const potentialMismatches = jobs.filter(job => {
+      const usLocationIndicators = ['USA', 'United States', ', NY', ', CA', ', TX', ', FL', ', WA', ', IL'];
+      const hasUSLocation = usLocationIndicators.some(indicator => 
+        job.location && job.location.includes(indicator)
+      );
+      
+      const developerTitles = ['Software Engineer', 'Developer', 'Frontend', 'Backend', 'Full Stack'];
+      const isDeveloperRole = developerTitles.some(title => 
+        job.title && job.title.toLowerCase().includes(title.toLowerCase())
+      );
+      
+      return hasUSLocation || isDeveloperRole;
+    });
+
+    if (potentialMismatches.length > filteredJobs.length * 0.3) {
+      console.warn('Profile mismatch detected: Many jobs appear to be for different location/role than expected');
+      if (potentialMismatches.length > 5) {
+        setError('Job results may not match your profile. Please verify your location and role preferences are correctly set.');
+      }
+    }
+  };
+
+  // Run mismatch detection when jobs change
+  React.useEffect(() => {
+    if (jobs.length > 0) {
+      detectProfileMismatch();
+    }
+  }, [jobs]);
 const handleSearch = (searchTerm) => {
     setFilters(prev => ({ ...prev, search: searchTerm }));
     setLastSearchType('manual');

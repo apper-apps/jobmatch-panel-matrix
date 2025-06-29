@@ -366,36 +366,60 @@ console.error("Error deleting job match:", error);
     }
   },
 
-  buildJobSearchPrompt(searchQuery, profile, preferences) {
+buildJobSearchPrompt(searchQuery, profile, preferences) {
+    // Extract user's likely location and role from profile for better targeting
+    const userLocation = preferences.locations && preferences.locations.length > 0 
+      ? preferences.locations[0] 
+      : 'location not specified';
+    
+    const userRole = profile.experience && profile.experience.length > 0 
+      ? profile.experience[0].title 
+      : 'role not specified';
+
     return `
 You are an expert job search AI that finds relevant job opportunities based on user queries and profiles. 
+
+CRITICAL FILTERING REQUIREMENTS:
+- STRICTLY match the user's geographic location preferences
+- ONLY suggest jobs that align with the user's professional role and experience level
+- DO NOT suggest jobs in different countries unless explicitly requested
+- DO NOT suggest jobs in completely different career fields
 
 USER SEARCH QUERY: "${searchQuery}"
 
 USER PROFILE:
 - Name: ${profile.name || 'Not specified'}
+- Current Role: ${userRole}
+- Primary Location: ${userLocation}
 - Skills: ${(profile.skills || []).join(', ') || 'Not specified'}
 - Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company}`).join(', ') || 'Not specified'}
 
 USER PREFERENCES:
 - Salary: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}` : 'Not specified'}
-- Locations: ${(preferences.locations || []).join(', ') || 'Any location'}
+- Preferred Locations: ${(preferences.locations || []).join(', ') || 'User location only'}
 - Job Types: ${(preferences.jobTypes || []).join(', ') || 'Any type'}
 - Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Any arrangement'}
 - Positive Keywords: ${(preferences.positiveKeywords || []).join(', ') || 'None specified'}
 - Negative Keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
-Please generate 5-10 realistic job opportunities that match both the search query and user profile. Return the results as a JSON array with this exact structure:
+MANDATORY REQUIREMENTS:
+1. Jobs MUST be in the user's preferred locations (${(preferences.locations || []).join(', ') || userLocation})
+2. Jobs MUST align with the user's career field and experience level
+3. Job titles should be relevant to "${userRole}" or similar roles
+4. If user is in Europe, DO NOT suggest US-based positions unless "Remote" and explicitly global
+5. Match the user's professional level (junior, mid-level, senior, executive)
+
+Please generate 5-10 realistic job opportunities that STRICTLY match the user's location, role, and preferences. Return the results as a JSON array with this exact structure:
 
 [
   {
-    "title": "Job title",
+    "title": "Job title relevant to ${userRole}",
     "company": "Company name",
-    "location": "City, Country or Remote",
-    "salary": "Salary range or 'Competitive'",
+    "location": "Must be in ${userLocation} or user's preferred locations",
+    "salary": "Salary range in appropriate currency",
     "work_arrangement": "Remote/Hybrid/On-site",
     "job_type": "Full-time/Part-time/Contract",
-    "description": "Detailed job description highlighting key responsibilities and requirements",
+    "description": "Detailed job description highlighting key responsibilities and requirements relevant to ${userRole}",
     "company_description": "Brief company description and what they do",
     "url": "https://example.com/job-url",
     "logo": "https://example.com/company-logo.png",
@@ -406,45 +430,79 @@ Please generate 5-10 realistic job opportunities that match both the search quer
   }
 ]
 
-Ensure jobs are realistic, relevant to the search query, and match the user's profile and preferences. Calculate match scores based on how well each job aligns with the user's skills and preferences.
+VALIDATION: Before generating each job, verify:
+- Location matches user preferences: ✓
+- Role aligns with user experience: ✓
+- Career level is appropriate: ✓
+- No geographic mismatches: ✓
 `;
   },
 
-  buildJobDiscoveryPrompt(profile, preferences) {
+buildJobDiscoveryPrompt(profile, preferences) {
+    // Determine user's primary location and role for strict targeting
+    const primaryLocation = preferences.locations && preferences.locations.length > 0 
+      ? preferences.locations[0] 
+      : 'location preferences not set';
+    
+    const currentRole = profile.experience && profile.experience.length > 0 
+      ? profile.experience[0].title 
+      : 'role not clearly defined';
+
+    const experienceLevel = profile.experience && profile.experience.length > 0 
+      ? (profile.experience.length >= 3 ? 'Senior' : 'Mid-level') 
+      : 'Entry-level';
+
     return `
 You are an intelligent job discovery AI that automatically finds the best job opportunities for users based on their profiles and preferences.
 
-USER PROFILE:
+CRITICAL DISCOVERY CONSTRAINTS:
+- ABSOLUTE LOCATION MATCH: Only suggest jobs in user's specified locations
+- ROLE ALIGNMENT: Jobs must match user's career trajectory and experience
+- NO GEOGRAPHIC MISMATCHES: European users get European jobs, US users get US jobs
+- CAREER PROGRESSION: Suggest roles appropriate for user's experience level
+
+USER PROFILE ANALYSIS:
 - Name: ${profile.name || 'Professional'}
+- Current Role: ${currentRole}
+- Experience Level: ${experienceLevel}
+- Primary Location: ${primaryLocation}
 - Skills: ${(profile.skills || []).join(', ') || 'General skills'}
-- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company} (${exp.duration})`).join('; ') || 'Various experience'}
+- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company} (${exp.duration || 'duration not specified'})`).join('; ') || 'Various experience'}
 - Education: ${profile.education?.map(edu => `${edu.degree} from ${edu.institution}`).join('; ') || 'Educational background'}
 
 USER PREFERENCES:
 - Salary Expectation: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+ (${preferences.salaryType})` : 'Competitive salary'}
-- Preferred Locations: ${(preferences.locations || []).join(', ') || 'Open to various locations'}
+- REQUIRED Locations: ${(preferences.locations || []).join(', ') || 'Must respect user location'}
 - Job Types: ${(preferences.jobTypes || []).join(', ') || 'Open to various types'}
 - Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Flexible arrangements'}
 - Seeking: ${(preferences.positiveKeywords || []).join(', ') || 'Growth opportunities'}
 - Avoiding: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
+DISCOVERY RULES:
+1. LOCATION CONSTRAINT: Every job MUST be in "${primaryLocation}" or user's other preferred locations
+2. ROLE RELEVANCE: Jobs must be relevant to "${currentRole}" or natural career progression
+3. EXPERIENCE MATCH: Suggest ${experienceLevel} positions appropriate for user's background
+4. NO CAREER FIELD SWITCHING: Don't suggest developer jobs for product managers, etc.
+5. GEOGRAPHIC CONSISTENCY: Respect regional job markets and salary expectations
+
 Based on this profile, discover 8-12 high-quality job opportunities that would be perfect matches. Focus on:
-1. Jobs that utilize the user's skills and experience
-2. Opportunities that match salary and location preferences  
-3. Roles that include positive keywords and avoid negative ones
-4. Companies and positions that offer career growth
+1. Jobs that utilize the user's skills and experience in ${currentRole}
+2. Opportunities in ${primaryLocation} or user's preferred locations ONLY
+3. ${experienceLevel} roles that match career progression
+4. Roles that include positive keywords and avoid negative ones
+5. Companies and positions that offer career growth in user's field
 
 Return results as a JSON array with this structure:
 
 [
   {
-    "title": "Perfect job title for this candidate",
+    "title": "${experienceLevel} ${currentRole} or related role",
     "company": "Reputable company name",
-    "location": "Preferred location or remote option",
-    "salary": "Competitive salary range",
+    "location": "MUST be in ${primaryLocation} or user's preferred locations",
+    "salary": "Competitive salary range in ${preferences.currency || 'local currency'}",
     "work_arrangement": "Preferred work arrangement",
     "job_type": "Preferred job type",
-    "description": "Compelling job description that matches user's background and interests",
+    "description": "Compelling job description that matches user's ${currentRole} background and interests",
     "company_description": "Attractive company description highlighting culture and growth",
     "url": "https://realistic-job-url.com",
     "logo": "https://company-logo-url.com",
@@ -454,6 +512,13 @@ Return results as a JSON array with this structure:
     "preference_match": 88
   }
 ]
+
+FINAL VALIDATION CHECKLIST:
+✓ All jobs in user's geographic region (${primaryLocation})
+✓ All roles relevant to ${currentRole} career path
+✓ Experience level matches ${experienceLevel}
+✓ No cross-continental job suggestions
+✓ Career field consistency maintained
 
 Make each job highly relevant and appealing to this specific user profile. Ensure high match scores (80-95) since these are targeted discoveries.
 `;
