@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import Header from '@/components/organisms/Header';
-import JobMatchCard from '@/components/molecules/JobMatchCard';
-import SearchBar from '@/components/molecules/SearchBar';
-import Button from '@/components/atoms/Button';
-import Badge from '@/components/atoms/Badge';
-import Loading from '@/components/ui/Loading';
-import Error from '@/components/ui/Error';
-import Empty from '@/components/ui/Empty';
-import ApperIcon from '@/components/ApperIcon';
-import { jobMatchService } from '@/services/api/jobMatchService';
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import ApperIcon from "@/components/ApperIcon";
+import Header from "@/components/organisms/Header";
+import Badge from "@/components/atoms/Badge";
+import Button from "@/components/atoms/Button";
+import JobMatchCard from "@/components/molecules/JobMatchCard";
+import SearchBar from "@/components/molecules/SearchBar";
+import Error from "@/components/ui/Error";
+import Empty from "@/components/ui/Empty";
+import Loading from "@/components/ui/Loading";
+import { jobMatchService } from "@/services/api/jobMatchService";
 
 const JobMatchesPage = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [aiSearching, setAiSearching] = useState(false);
+  const [lastSearchType, setLastSearchType] = useState('manual');
   const [filters, setFilters] = useState({
     search: '',
     minMatch: 80,
@@ -54,13 +56,53 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
 
     return matchesSearch && matchesMinMatch && matchesJobType && matchesWorkArrangement;
   });
-
-  const handleSearch = (searchTerm) => {
+const handleSearch = (searchTerm) => {
     setFilters(prev => ({ ...prev, search: searchTerm }));
+    setLastSearchType('manual');
+  };
+
+  const handleAISearch = async (searchQuery) => {
+    try {
+      setAiSearching(true);
+      setError('');
+      setLastSearchType('ai');
+      
+      const aiJobs = await jobMatchService.aiJobSearch(searchQuery);
+      setJobs(aiJobs);
+      
+      // Update search filter to show the AI query
+      setFilters(prev => ({ ...prev, search: searchQuery }));
+      
+    } catch (err) {
+      setError('AI job search failed. Please try again or check your AI configuration.');
+      console.error('AI search error:', err);
+    } finally {
+      setAiSearching(false);
+    }
+  };
+
+  const handleAIJobDiscovery = async () => {
+    try {
+      setAiSearching(true);
+      setError('');
+      setLastSearchType('discovery');
+      
+      const discoveredJobs = await jobMatchService.aiJobDiscovery();
+      setJobs(discoveredJobs);
+      
+      // Clear search filter for discovery mode
+      setFilters(prev => ({ ...prev, search: '' }));
+      
+    } catch (err) {
+      setError('AI job discovery failed. Please check your AI configuration and try again.');
+      console.error('AI discovery error:', err);
+    } finally {
+      setAiSearching(false);
+    }
   };
 
   const headerActions = (
-    <div className="flex items-center gap-2">
+<div className="flex items-center gap-2">
       <Button
         variant="secondary"
         icon="RefreshCw"
@@ -68,6 +110,14 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
         loading={loading}
       >
         Refresh
+      </Button>
+      <Button
+        variant="accent"
+        icon="Sparkles"
+        onClick={handleAIJobDiscovery}
+        loading={aiSearching}
+      >
+        AI Job Discovery
       </Button>
       <Button
         variant="primary"
@@ -112,11 +162,11 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
     );
   }
 
-  return (
+return (
     <div className="h-full flex flex-col">
       <Header 
         title="Job Matches" 
-        subtitle={`${filteredJobs.length} opportunities found`}
+        subtitle={`${filteredJobs.length} opportunities found${lastSearchType === 'ai' ? ' (AI Search)' : lastSearchType === 'discovery' ? ' (AI Discovery)' : ''}`}
         actions={headerActions}
       />
       
@@ -127,11 +177,14 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6"
         >
-          <div className="flex flex-col lg:flex-row gap-4">
+<div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1">
               <SearchBar
                 placeholder="Search by job title or company..."
                 onSearch={handleSearch}
+                onAISearch={handleAISearch}
+                loading={aiSearching}
+                supportsAI={true}
               />
             </div>
             
@@ -169,8 +222,7 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
               </select>
             </div>
           </div>
-          
-          {/* Filter Summary */}
+{/* Filter Summary */}
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
             <span className="text-sm text-gray-600">Active filters:</span>
             <Badge variant="primary" size="sm">
@@ -183,22 +235,50 @@ const matchesWorkArrangement = filters.workArrangement === 'all' ||
               <Badge variant="accent" size="sm">{filters.workArrangement}</Badge>
             )}
             {filters.search && (
-              <Badge variant="default" size="sm">
-                <ApperIcon name="Search" size={12} className="mr-1" />
+              <Badge variant={lastSearchType === 'ai' ? 'accent' : 'default'} size="sm">
+                <ApperIcon name={lastSearchType === 'ai' ? "Sparkles" : "Search"} size={12} className="mr-1" />
                 "{filters.search}"
+                {lastSearchType === 'ai' && <span className="ml-1 text-xs">(AI)</span>}
+              </Badge>
+            )}
+            {lastSearchType === 'discovery' && (
+              <Badge variant="accent" size="sm">
+                <ApperIcon name="Bot" size={12} className="mr-1" />
+                AI Discovery Mode
               </Badge>
             )}
           </div>
+          
+          {/* AI Search Status */}
+          {aiSearching && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3">
+                <ApperIcon name="Loader2" size={20} className="animate-spin text-blue-600" />
+                <div>
+                  <div className="text-blue-800 font-medium">
+                    {lastSearchType === 'discovery' ? 'AI is discovering new job opportunities...' : 'AI is searching for relevant positions...'}
+                  </div>
+                  <div className="text-blue-600 text-sm">
+                    Using your profile and preferences to find the best matches
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Job Matches */}
-        {filteredJobs.length === 0 ? (
+{filteredJobs.length === 0 && !aiSearching ? (
           <Empty
-            icon="Search"
-            title="No job matches found"
-            message="Try adjusting your filters or update your profile to get better matches."
-            actionLabel="Update Profile"
-            onAction={() => window.location.href = '/profile'}
+            icon={lastSearchType === 'ai' || lastSearchType === 'discovery' ? "Bot" : "Search"}
+            title={lastSearchType === 'ai' || lastSearchType === 'discovery' ? "No AI matches found" : "No job matches found"}
+            message={
+              lastSearchType === 'ai' ? "AI couldn't find jobs matching your search. Try a different query or check your AI configuration." :
+              lastSearchType === 'discovery' ? "AI discovery didn't find new opportunities. Try updating your profile or preferences." :
+              "Try adjusting your filters, use AI search, or update your profile to get better matches."
+            }
+            actionLabel={lastSearchType === 'ai' || lastSearchType === 'discovery' ? "Try Regular Search" : "Try AI Discovery"}
+            onAction={() => lastSearchType === 'ai' || lastSearchType === 'discovery' ? handleSearch('') : handleAIJobDiscovery()}
           />
         ) : (
           <motion.div

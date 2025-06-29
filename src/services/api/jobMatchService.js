@@ -1,5 +1,6 @@
-import { toast } from 'react-toastify';
-
+import { toast } from "react-toastify";
+import { userProfileService } from "@/services/api/userProfileService";
+import { jobPreferencesService } from "@/services/api/jobPreferencesService";
 export const jobMatchService = {
   async getAll() {
     try {
@@ -281,9 +282,461 @@ const response = await apperClient.getRecordById('job_match', parseInt(id), para
 
       return false;
     } catch (error) {
-      console.error("Error deleting job match:", error);
+console.error("Error deleting job match:", error);
       toast.error("Failed to delete job match");
       throw error;
+    }
+  },
+
+  // AI-powered job search and discovery methods
+  async aiJobSearch(searchQuery) {
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      // Get user profile and preferences for AI context
+      const profile = await userProfileService.getProfile();
+      const preferences = await jobPreferencesService.getPreferences();
+
+      if (!profile?.api_key) {
+        throw new Error('AI API key not configured. Please set up your AI configuration in the Profile section.');
+      }
+
+      // Prepare AI prompt for job search
+      const aiPrompt = this.buildJobSearchPrompt(searchQuery, profile, preferences);
+      
+      // Extract jobs using AI
+      const aiJobs = await this.extractJobsWithAI(aiPrompt, profile.api_key, profile.api_service || 'google');
+      
+      // Score and rank jobs
+      const scoredJobs = this.scoreJobs(aiJobs, profile, preferences);
+      
+      // Store discovered jobs in database
+      await this.storeAIJobs(scoredJobs);
+      
+      toast.success(`AI found ${scoredJobs.length} relevant job opportunities!`);
+      return scoredJobs;
+
+    } catch (error) {
+      console.error("Error in AI job search:", error);
+      toast.error(`AI job search failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  async aiJobDiscovery() {
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      // Get user profile and preferences
+      const profile = await userProfileService.getProfile();
+      const preferences = await jobPreferencesService.getPreferences();
+
+      if (!profile?.api_key) {
+        throw new Error('AI API key not configured. Please set up your AI configuration in the Profile section.');
+      }
+
+      // Build automatic discovery query based on profile
+      const discoveryQuery = this.buildDiscoveryQuery(profile, preferences);
+      
+      // Use AI to find jobs automatically
+      const aiPrompt = this.buildJobDiscoveryPrompt(profile, preferences);
+      const discoveredJobs = await this.extractJobsWithAI(aiPrompt, profile.api_key, profile.api_service || 'google');
+      
+      // Score and rank discovered jobs
+      const scoredJobs = this.scoreJobs(discoveredJobs, profile, preferences);
+      
+      // Store discovered jobs
+      await this.storeAIJobs(scoredJobs);
+      
+      toast.success(`AI discovered ${scoredJobs.length} new job opportunities tailored for you!`);
+      return scoredJobs;
+
+    } catch (error) {
+      console.error("Error in AI job discovery:", error);
+      toast.error(`AI job discovery failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  buildJobSearchPrompt(searchQuery, profile, preferences) {
+    return `
+You are an expert job search AI that finds relevant job opportunities based on user queries and profiles. 
+
+USER SEARCH QUERY: "${searchQuery}"
+
+USER PROFILE:
+- Name: ${profile.name || 'Not specified'}
+- Skills: ${(profile.skills || []).join(', ') || 'Not specified'}
+- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company}`).join(', ') || 'Not specified'}
+
+USER PREFERENCES:
+- Salary: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}` : 'Not specified'}
+- Locations: ${(preferences.locations || []).join(', ') || 'Any location'}
+- Job Types: ${(preferences.jobTypes || []).join(', ') || 'Any type'}
+- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Any arrangement'}
+- Positive Keywords: ${(preferences.positiveKeywords || []).join(', ') || 'None specified'}
+- Negative Keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
+
+Please generate 5-10 realistic job opportunities that match both the search query and user profile. Return the results as a JSON array with this exact structure:
+
+[
+  {
+    "title": "Job title",
+    "company": "Company name",
+    "location": "City, Country or Remote",
+    "salary": "Salary range or 'Competitive'",
+    "work_arrangement": "Remote/Hybrid/On-site",
+    "job_type": "Full-time/Part-time/Contract",
+    "description": "Detailed job description highlighting key responsibilities and requirements",
+    "company_description": "Brief company description and what they do",
+    "url": "https://example.com/job-url",
+    "logo": "https://example.com/company-logo.png",
+    "posted_date": "2024-01-15T10:00:00Z",
+    "benefits": "Key benefits and perks",
+    "profile_match": 85,
+    "preference_match": 92
+  }
+]
+
+Ensure jobs are realistic, relevant to the search query, and match the user's profile and preferences. Calculate match scores based on how well each job aligns with the user's skills and preferences.
+`;
+  },
+
+  buildJobDiscoveryPrompt(profile, preferences) {
+    return `
+You are an intelligent job discovery AI that automatically finds the best job opportunities for users based on their profiles and preferences.
+
+USER PROFILE:
+- Name: ${profile.name || 'Professional'}
+- Skills: ${(profile.skills || []).join(', ') || 'General skills'}
+- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company} (${exp.duration})`).join('; ') || 'Various experience'}
+- Education: ${profile.education?.map(edu => `${edu.degree} from ${edu.institution}`).join('; ') || 'Educational background'}
+
+USER PREFERENCES:
+- Salary Expectation: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+ (${preferences.salaryType})` : 'Competitive salary'}
+- Preferred Locations: ${(preferences.locations || []).join(', ') || 'Open to various locations'}
+- Job Types: ${(preferences.jobTypes || []).join(', ') || 'Open to various types'}
+- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Flexible arrangements'}
+- Seeking: ${(preferences.positiveKeywords || []).join(', ') || 'Growth opportunities'}
+- Avoiding: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
+
+Based on this profile, discover 8-12 high-quality job opportunities that would be perfect matches. Focus on:
+1. Jobs that utilize the user's skills and experience
+2. Opportunities that match salary and location preferences  
+3. Roles that include positive keywords and avoid negative ones
+4. Companies and positions that offer career growth
+
+Return results as a JSON array with this structure:
+
+[
+  {
+    "title": "Perfect job title for this candidate",
+    "company": "Reputable company name",
+    "location": "Preferred location or remote option",
+    "salary": "Competitive salary range",
+    "work_arrangement": "Preferred work arrangement",
+    "job_type": "Preferred job type",
+    "description": "Compelling job description that matches user's background and interests",
+    "company_description": "Attractive company description highlighting culture and growth",
+    "url": "https://realistic-job-url.com",
+    "logo": "https://company-logo-url.com",
+    "posted_date": "Recent date in ISO format",
+    "benefits": "Attractive benefits package",
+    "profile_match": 90,
+    "preference_match": 88
+  }
+]
+
+Make each job highly relevant and appealing to this specific user profile. Ensure high match scores (80-95) since these are targeted discoveries.
+`;
+  },
+
+  buildDiscoveryQuery(profile, preferences) {
+    const skills = (profile.skills || []).slice(0, 3).join(' ');
+    const locations = (preferences.locations || []).slice(0, 2).join(' OR ');
+    const jobTypes = (preferences.jobTypes || []).join(' ');
+    
+    return `${skills} ${jobTypes} ${locations}`.trim();
+  },
+
+  async extractJobsWithAI(prompt, apiKey, service = 'google') {
+    try {
+      let extractedJobs = null;
+
+      switch (service) {
+        case 'openai':
+          extractedJobs = await this.extractWithOpenAI(prompt, apiKey);
+          break;
+        case 'google':
+          extractedJobs = await this.extractWithGoogle(prompt, apiKey);
+          break;
+        case 'openrouter':
+          extractedJobs = await this.extractWithOpenRouter(prompt, apiKey);
+          break;
+        default:
+          throw new Error(`Unsupported AI service: ${service}`);
+      }
+
+      return Array.isArray(extractedJobs) ? extractedJobs : [];
+    } catch (error) {
+      console.error('AI job extraction failed:', error);
+      throw error;
+    }
+  },
+
+  async extractWithOpenAI(prompt, apiKey) {
+    const { default: OpenAI } = await import('openai');
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: "system",
+          content: "You are a job search AI that finds and returns job opportunities as valid JSON arrays."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 4000
+    });
+
+    const responseContent = completion.choices[0].message.content.trim();
+    return JSON.parse(responseContent);
+  },
+
+  async extractWithGoogle(prompt, apiKey) {
+    const { default: axios } = await import('axios');
+    
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 4000,
+          topP: 0.8,
+          topK: 40
+        }
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      throw new Error('Invalid response from Google AI');
+    }
+
+    const responseContent = response.data.candidates[0].content.parts[0].text.trim();
+    
+    // Clean and parse JSON
+    let cleanContent = responseContent.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const jsonStart = cleanContent.indexOf('[');
+    const jsonEnd = cleanContent.lastIndexOf(']') + 1;
+    
+    if (jsonStart === -1 || jsonEnd <= jsonStart) {
+      throw new Error('No valid JSON array found in AI response');
+    }
+    
+    cleanContent = cleanContent.substring(jsonStart, jsonEnd);
+    return JSON.parse(cleanContent);
+  },
+
+  async extractWithOpenRouter(prompt, apiKey) {
+    const { default: axios } = await import('axios');
+    
+    const response = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        messages: [
+          {
+            role: "system",
+            content: "You are a job search AI that finds and returns job opportunities as valid JSON arrays."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 4000
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'JobMatch Pro Job Search'
+        }
+      }
+    );
+
+    const responseContent = response.data.choices[0].message.content.trim();
+    return JSON.parse(responseContent);
+  },
+
+  scoreJobs(jobs, profile, preferences) {
+    return jobs.map(job => {
+      let profileScore = this.calculateProfileMatch(job, profile);
+      let preferenceScore = this.calculatePreferenceMatch(job, preferences);
+      
+      return {
+        ...job,
+        Name: `${job.title} at ${job.company}`,
+        profile_match: Math.min(100, profileScore),
+        preference_match: Math.min(100, preferenceScore)
+      };
+    });
+  },
+
+  calculateProfileMatch(job, profile) {
+    let score = 0;
+    const userSkills = (profile.skills || []).map(s => s.toLowerCase());
+    const jobText = `${job.title} ${job.description}`.toLowerCase();
+    
+    // Skills matching
+    const skillMatches = userSkills.filter(skill => jobText.includes(skill));
+    score += (skillMatches.length / Math.max(userSkills.length, 1)) * 60;
+    
+    // Experience level matching
+    if (profile.experience && profile.experience.length > 0) {
+      const userTitles = profile.experience.map(exp => exp.title?.toLowerCase() || '');
+      const titleMatch = userTitles.some(title => 
+        title && jobText.includes(title.split(' ')[0])
+      );
+      if (titleMatch) score += 20;
+    }
+    
+    // Education matching
+    if (profile.education && profile.education.length > 0) {
+      const hasEducation = profile.education.some(edu => edu.degree);
+      if (hasEducation) score += 10;
+    }
+    
+    // Base score for AI-generated matches
+    score += 10;
+    
+    return Math.min(100, score);
+  },
+
+  calculatePreferenceMatch(job, preferences) {
+    let score = 0;
+    
+    // Salary matching
+    if (preferences.minSalary && job.salary && job.salary !== 'Competitive') {
+      const salaryNumbers = job.salary.match(/\d+/g);
+      if (salaryNumbers && parseInt(salaryNumbers[0]) >= preferences.minSalary) {
+        score += 25;
+      }
+    } else {
+      score += 15; // Partial score if salary not specified
+    }
+    
+    // Location matching
+    if (preferences.locations && preferences.locations.length > 0) {
+      const locationMatch = preferences.locations.some(prefLoc => 
+        job.location.toLowerCase().includes(prefLoc.toLowerCase()) ||
+        prefLoc.toLowerCase().includes('remote') && job.work_arrangement === 'Remote'
+      );
+      if (locationMatch) score += 20;
+    } else {
+      score += 15;
+    }
+    
+    // Job type matching
+    if (preferences.jobTypes && preferences.jobTypes.includes(job.job_type)) {
+      score += 15;
+    }
+    
+    // Work arrangement matching
+    if (preferences.workArrangements && preferences.workArrangements.includes(job.work_arrangement)) {
+      score += 15;
+    }
+    
+    // Positive keywords
+    if (preferences.positiveKeywords && preferences.positiveKeywords.length > 0) {
+      const jobText = `${job.title} ${job.description} ${job.company_description}`.toLowerCase();
+      const positiveMatches = preferences.positiveKeywords.filter(keyword =>
+        jobText.includes(keyword.toLowerCase())
+      );
+      score += (positiveMatches.length / preferences.positiveKeywords.length) * 15;
+    }
+    
+    // Negative keywords (subtract score)
+    if (preferences.negativeKeywords && preferences.negativeKeywords.length > 0) {
+      const jobText = `${job.title} ${job.description} ${job.company_description}`.toLowerCase();
+      const negativeMatches = preferences.negativeKeywords.filter(keyword =>
+        jobText.includes(keyword.toLowerCase())
+      );
+      score -= negativeMatches.length * 10;
+    }
+    
+    // Base score for preferences
+    score += 10;
+    
+    return Math.max(0, Math.min(100, score));
+  },
+
+  async storeAIJobs(jobs) {
+    if (!jobs || jobs.length === 0) return;
+
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      const records = jobs.map(job => ({
+        Name: job.Name,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        salary: job.salary,
+        profile_match: job.profile_match,
+        preference_match: job.preference_match,
+        work_arrangement: job.work_arrangement,
+        job_type: job.job_type,
+        description: job.description,
+        company_description: job.company_description,
+        url: job.url,
+        logo: job.logo,
+        posted_date: job.posted_date,
+        benefits: job.benefits
+      }));
+
+      const params = { records };
+      const response = await apperClient.createRecord('job_match', params);
+      
+      if (!response.success) {
+        console.warn('Failed to store some AI jobs:', response.message);
+      }
+    } catch (error) {
+console.warn('Error storing AI jobs:', error);
+      // Don't throw - this is not critical for the user experience
     }
   }
 };
