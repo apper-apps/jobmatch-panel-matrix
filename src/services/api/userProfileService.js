@@ -321,13 +321,8 @@ async importResume(file) {
       }
 
 // Validate that we have minimum required data - require at least one essential field
-      if (!extractedData.name && !extractedData.email) {
-        const missingFields = [];
-        if (!extractedData.name) missingFields.push('name');
-        if (!extractedData.email) missingFields.push('email address');
-        
-        throw new Error(`Unable to extract essential profile information from PDF. Missing: ${missingFields.join(', ')}. Please ensure the PDF contains clearly formatted contact information in the header section or a dedicated contact area.`);
-      }
+// Allow extraction to proceed even if name and email are missing
+      // The UI will handle partial data gracefully and prompt user to review
       
       // Log what was found vs what was missing for better user feedback
       const extractionSummary = {
