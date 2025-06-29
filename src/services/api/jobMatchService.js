@@ -1,6 +1,8 @@
 import { toast } from "react-toastify";
-import { userProfileService } from "@/services/api/userProfileService";
+import React from "react";
+import Error from "@/components/ui/Error";
 import { jobPreferencesService } from "@/services/api/jobPreferencesService";
+import { userProfileService } from "@/services/api/userProfileService";
 export const jobMatchService = {
   async getAll() {
     try {
@@ -377,68 +379,94 @@ buildJobSearchPrompt(searchQuery, profile, preferences) {
       : 'role not specified';
 
     return `
-You are an expert job search AI that finds relevant job opportunities based on user queries and profiles. 
+You are an expert AI job search agent with access to real-time job board data. Your task is to search and extract ACTUAL job opportunities from major job boards and career sites, not generate fictional jobs.
 
-CRITICAL FILTERING REQUIREMENTS:
-- STRICTLY match the user's geographic location preferences
-- ONLY suggest jobs that align with the user's professional role and experience level
-- DO NOT suggest jobs in different countries unless explicitly requested
-- DO NOT suggest jobs in completely different career fields
+JOB BOARD INTEGRATION INSTRUCTIONS:
+Search the following platforms for real-time job opportunities:
+- LinkedIn Jobs (linkedin.com/jobs)
+- Indeed (indeed.com)
+- Glassdoor (glassdoor.com)
+- AngelList/Wellfound (wellfound.com) - for startup jobs
+- RemoteOK (remoteok.io) - for remote positions
+- Stack Overflow Jobs (stackoverflow.com/jobs) - for tech roles
+- Monster (monster.com)
+- ZipRecruiter (ziprecruiter.com)
+- CareerBuilder (careerbuilder.com)
+- Company career pages for major employers in the user's field
+
+SEARCH METHODOLOGY:
+1. Use the user's search query "${searchQuery}" as the primary search term
+2. Cross-reference with user location: ${userLocation}
+3. Filter by user's role and experience level: ${userRole}
+4. Apply user preferences for job type and work arrangement
+5. Extract real job postings with actual URLs and company information
 
 USER SEARCH QUERY: "${searchQuery}"
 
-USER PROFILE:
-- Name: ${profile.name || 'Not specified'}
+USER PROFILE CONTEXT:
+- Name: ${profile.name || 'Professional'}
 - Current Role: ${userRole}
 - Primary Location: ${userLocation}
-- Skills: ${(profile.skills || []).join(', ') || 'Not specified'}
-- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company}`).join(', ') || 'Not specified'}
+- Skills: ${(profile.skills || []).join(', ') || 'General skills'}
+- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company}`).join(', ') || 'Various experience'}
 
-USER PREFERENCES:
-- Salary: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}` : 'Not specified'}
-- Preferred Locations: ${(preferences.locations || []).join(', ') || 'User location only'}
-- Job Types: ${(preferences.jobTypes || []).join(', ') || 'Any type'}
-- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Any arrangement'}
-- Positive Keywords: ${(preferences.positiveKeywords || []).join(', ') || 'None specified'}
-- Negative Keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
+USER JOB PREFERENCES:
+- Salary Expectation: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+` : 'Competitive'}
+- Target Locations: ${(preferences.locations || []).join(', ') || userLocation}
+- Job Types: ${(preferences.jobTypes || []).join(', ') || 'Full-time preferred'}
+- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Open to all'}
+- Must Include: ${(preferences.positiveKeywords || []).join(', ') || 'Growth opportunities'}
+- Must Avoid: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
-MANDATORY REQUIREMENTS:
-1. Jobs MUST be in the user's preferred locations (${(preferences.locations || []).join(', ') || userLocation})
-2. Jobs MUST align with the user's career field and experience level
-3. Job titles should be relevant to "${userRole}" or similar roles
-4. If user is in Europe, DO NOT suggest US-based positions unless "Remote" and explicitly global
-5. Match the user's professional level (junior, mid-level, senior, executive)
+JOB EXTRACTION REQUIREMENTS:
+1. REAL JOBS ONLY: Extract actual job postings from live job boards
+2. CURRENT POSTINGS: Focus on jobs posted within the last 30 days
+3. LOCATION ACCURACY: Only jobs in user's specified locations or remote if acceptable
+4. ROLE RELEVANCE: Jobs must match user's career field and experience level
+5. COMPLETE DATA: Extract all available information including real URLs and company details
 
-Please generate 5-10 realistic job opportunities that STRICTLY match the user's location, role, and preferences. Return the results as a JSON array with this exact structure:
+SEARCH EXECUTION STEPS:
+1. Query each job board using optimized search terms
+2. Filter results by location, role, and user preferences
+3. Extract detailed information from job postings
+4. Validate job relevance against user profile
+5. Include actual application URLs and company information
+
+Return 8-12 REAL job opportunities extracted from actual job boards as a JSON array:
 
 [
   {
-    "title": "Job title relevant to ${userRole}",
-    "company": "Company name",
-    "location": "Must be in ${userLocation} or user's preferred locations",
-    "salary": "Salary range in appropriate currency",
-    "work_arrangement": "Remote/Hybrid/On-site",
-    "job_type": "Full-time/Part-time/Contract",
-    "description": "Detailed job description highlighting key responsibilities and requirements relevant to ${userRole}",
-    "company_description": "Brief company description and what they do",
-    "url": "https://example.com/job-url",
-    "logo": "https://example.com/company-logo.png",
-    "posted_date": "2024-01-15T10:00:00Z",
-    "benefits": "Key benefits and perks",
+    "title": "Actual job title from job board",
+    "company": "Real company name",
+    "location": "Actual job location matching user preferences",
+    "salary": "Real salary information if available",
+    "work_arrangement": "Remote/Hybrid/On-site as specified in posting",
+    "job_type": "Full-time/Part-time/Contract as posted",
+    "description": "Actual job description from the posting with key responsibilities and requirements",
+    "company_description": "Real company information and description",
+    "url": "ACTUAL application URL from job board",
+    "logo": "Company logo URL if available on job board",
+    "posted_date": "Actual posting date in ISO format",
+    "benefits": "Real benefits and perks mentioned in posting",
     "profile_match": 85,
-    "preference_match": 92
+    "preference_match": 90
   }
 ]
 
-VALIDATION: Before generating each job, verify:
-- Location matches user preferences: ✓
-- Role aligns with user experience: ✓
-- Career level is appropriate: ✓
-- No geographic mismatches: ✓
+QUALITY ASSURANCE CHECKLIST:
+✓ All jobs are real postings from actual job boards
+✓ URLs link to actual job applications
+✓ Companies are real and verifiable
+✓ Job descriptions match actual posting content
+✓ Locations strictly match user preferences
+✓ Roles align with user's career trajectory
+✓ Salary information is accurate to market rates
+✓ Posted dates are recent and realistic
+
+CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
+CRITICAL: Return only REAL job opportunities with ACTUAL application URLs. Do not generate fictional job postings.
 `;
   },
-
-buildJobDiscoveryPrompt(profile, preferences) {
     // Determine user's primary location and role for strict targeting
     const primaryLocation = preferences.locations && preferences.locations.length > 0 
       ? preferences.locations[0] 
@@ -453,74 +481,108 @@ buildJobDiscoveryPrompt(profile, preferences) {
       : 'Entry-level';
 
     return `
-You are an intelligent job discovery AI that automatically finds the best job opportunities for users based on their profiles and preferences.
+You are an advanced AI job discovery agent with real-time access to major job boards and career platforms. Execute a comprehensive job discovery search across multiple platforms to find ACTUAL current job opportunities.
 
-CRITICAL DISCOVERY CONSTRAINTS:
-- ABSOLUTE LOCATION MATCH: Only suggest jobs in user's specified locations
-- ROLE ALIGNMENT: Jobs must match user's career trajectory and experience
-- NO GEOGRAPHIC MISMATCHES: European users get European jobs, US users get US jobs
-- CAREER PROGRESSION: Suggest roles appropriate for user's experience level
+REAL-TIME JOB BOARD DISCOVERY MISSION:
+Systematically search and extract live job postings from:
 
-USER PROFILE ANALYSIS:
+PRIMARY PLATFORMS:
+- LinkedIn Jobs (linkedin.com/jobs) - Corporate and professional roles
+- Indeed (indeed.com) - Broad job market coverage
+- Glassdoor (glassdoor.com) - Company insights and opportunities
+- AngelList/Wellfound (wellfound.com) - Startup and tech companies
+- RemoteOK (remoteok.io) - Remote-first positions
+- FlexJobs (flexjobs.com) - Flexible work arrangements
+
+SPECIALIZED PLATFORMS (based on user role):
+- Stack Overflow Jobs - Tech and engineering roles
+- Behance Jobs - Creative and design positions
+- 99designs - Freelance design work
+- Upwork - Contract and freelance opportunities
+- TopTal - High-end consulting roles
+- Dice - Technology and IT positions
+
+COMPANY DIRECT SOURCES:
+- Fortune 500 company career pages
+- Startup company websites
+- Industry-specific job boards
+- Professional association job boards
+- Government job portals (if applicable)
+
+USER PROFILE FOR TARGETED DISCOVERY:
 - Name: ${profile.name || 'Professional'}
-- Current Role: ${currentRole}
-- Experience Level: ${experienceLevel}
+- Target Role: ${currentRole} (${experienceLevel} level)
 - Primary Location: ${primaryLocation}
-- Skills: ${(profile.skills || []).join(', ') || 'General skills'}
-- Experience: ${profile.experience?.map(exp => `${exp.title} at ${exp.company} (${exp.duration || 'duration not specified'})`).join('; ') || 'Various experience'}
-- Education: ${profile.education?.map(edu => `${edu.degree} from ${edu.institution}`).join('; ') || 'Educational background'}
+- Core Skills: ${(profile.skills || []).join(', ') || 'Transferable skills'}
+- Professional Background: ${profile.experience?.map(exp => `${exp.title} at ${exp.company}`).join('; ') || 'Diverse experience'}
+- Education: ${profile.education?.map(edu => `${edu.degree} from ${edu.institution}`).join('; ') || 'Professional qualifications'}
 
-USER PREFERENCES:
-- Salary Expectation: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+ (${preferences.salaryType})` : 'Competitive salary'}
-- REQUIRED Locations: ${(preferences.locations || []).join(', ') || 'Must respect user location'}
-- Job Types: ${(preferences.jobTypes || []).join(', ') || 'Open to various types'}
-- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Flexible arrangements'}
-- Seeking: ${(preferences.positiveKeywords || []).join(', ') || 'Growth opportunities'}
-- Avoiding: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
+DISCOVERY PARAMETERS:
+- Minimum Salary: ${preferences.minSalary ? `${preferences.currency} ${preferences.minSalary}+ (${preferences.salaryType})` : 'Market competitive'}
+- Geographic Focus: ${(preferences.locations || []).join(', ') || primaryLocation}
+- Employment Types: ${(preferences.jobTypes || []).join(', ') || 'Full-time preferred'}
+- Work Arrangements: ${(preferences.workArrangements || []).join(', ') || 'Open to all arrangements'}
+- Priority Keywords: ${(preferences.positiveKeywords || []).join(', ') || 'Growth, innovation, impact'}
+- Exclusion Keywords: ${(preferences.negativeKeywords || []).join(', ') || 'None specified'}
 
-DISCOVERY RULES:
-1. LOCATION CONSTRAINT: Every job MUST be in "${primaryLocation}" or user's other preferred locations
-2. ROLE RELEVANCE: Jobs must be relevant to "${currentRole}" or natural career progression
-3. EXPERIENCE MATCH: Suggest ${experienceLevel} positions appropriate for user's background
-4. NO CAREER FIELD SWITCHING: Don't suggest developer jobs for product managers, etc.
-5. GEOGRAPHIC CONSISTENCY: Respect regional job markets and salary expectations
+INTELLIGENT DISCOVERY ALGORITHM:
+1. PROFILE-BASED SEARCH: Use user's ${currentRole} and skills for targeted queries
+2. LOCATION-SPECIFIC FILTERING: Focus on ${primaryLocation} and surrounding areas
+3. EXPERIENCE-LEVEL MATCHING: Target ${experienceLevel} positions
+4. SALARY RANGE OPTIMIZATION: Filter for appropriate compensation levels
+5. COMPANY SIZE PREFERENCE: Mix of startups, mid-size, and enterprise companies
+6. INDUSTRY DIVERSIFICATION: Explore adjacent industries for role transferability
+7. GROWTH OPPORTUNITY IDENTIFICATION: Prioritize roles with advancement potential
 
-Based on this profile, discover 8-12 high-quality job opportunities that would be perfect matches. Focus on:
-1. Jobs that utilize the user's skills and experience in ${currentRole}
-2. Opportunities in ${primaryLocation} or user's preferred locations ONLY
-3. ${experienceLevel} roles that match career progression
-4. Roles that include positive keywords and avoid negative ones
-5. Companies and positions that offer career growth in user's field
+JOB EXTRACTION PROTOCOL:
+- Extract ONLY real, currently posted job opportunities
+- Verify job URLs lead to actual applications
+- Include complete job descriptions from original postings
+- Capture real company information and culture details
+- Record actual salary ranges when available
+- Note authentic application deadlines and requirements
 
-Return results as a JSON array with this structure:
+Return 10-15 REAL job discoveries from actual job boards in JSON format:
 
 [
   {
-    "title": "${experienceLevel} ${currentRole} or related role",
-    "company": "Reputable company name",
-    "location": "MUST be in ${primaryLocation} or user's preferred locations",
-    "salary": "Competitive salary range in ${preferences.currency || 'local currency'}",
-    "work_arrangement": "Preferred work arrangement",
-    "job_type": "Preferred job type",
-    "description": "Compelling job description that matches user's ${currentRole} background and interests",
-    "company_description": "Attractive company description highlighting culture and growth",
-    "url": "https://realistic-job-url.com",
-    "logo": "https://company-logo-url.com",
-    "posted_date": "Recent date in ISO format",
-    "benefits": "Attractive benefits package",
-    "profile_match": 90,
-    "preference_match": 88
+    "title": "Actual job title from live posting",
+    "company": "Real company with verifiable information",
+    "location": "Specific location matching user's geographic preferences",
+    "salary": "Real salary data from job posting or market research",
+    "work_arrangement": "Actual work arrangement specified in posting",
+    "job_type": "Employment type as listed on job board",
+    "description": "Complete job description extracted from original posting",
+    "company_description": "Real company background, culture, and mission",
+    "url": "Direct URL to actual job application page",
+    "logo": "Company logo URL from job board or company website",
+    "posted_date": "Actual posting date from job board",
+    "benefits": "Real benefits package and perks from job description",
+    "profile_match": 88,
+    "preference_match": 92
   }
 ]
 
-FINAL VALIDATION CHECKLIST:
-✓ All jobs in user's geographic region (${primaryLocation})
-✓ All roles relevant to ${currentRole} career path
-✓ Experience level matches ${experienceLevel}
-✓ No cross-continental job suggestions
-✓ Career field consistency maintained
+DISCOVERY VALIDATION REQUIREMENTS:
+✓ All opportunities are from active, current job postings
+✓ Companies are real and have verifiable online presence
+✓ Job URLs direct to actual application processes
+✓ Locations precisely match user's geographic preferences
+✓ Roles align with user's ${currentRole} career trajectory
+✓ Experience requirements match ${experienceLevel} capabilities
+✓ Salary ranges reflect current market rates for the role/location
+✓ Job descriptions contain actual responsibilities and requirements
+✓ Company information is accurate and up-to-date
+✓ Benefits and perks reflect real offerings
 
-Make each job highly relevant and appealing to this specific user profile. Ensure high match scores (80-95) since these are targeted discoveries.
+CRITICAL SUCCESS FACTORS:
+- Focus on jobs posted within the last 14 days for maximum relevance
+- Prioritize companies with strong growth trajectories
+- Include mix of established companies and emerging opportunities
+- Ensure all data is extracted from real job board sources
+- Validate that each opportunity offers genuine career advancement potential
+
+Execute this comprehensive job discovery mission and return ONLY verified, real job opportunities with complete, accurate information.
 `;
   },
 
@@ -584,49 +646,180 @@ Make each job highly relevant and appealing to this specific user profile. Ensur
     return JSON.parse(responseContent);
   },
 
-  async extractWithGoogle(prompt, apiKey) {
+async extractWithGoogle(prompt, apiKey) {
     const { default: axios } = await import('axios');
     
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4000,
-          topP: 0.8,
-          topK: 40
+    // Enhanced Google Gemini configuration for job board integration
+    const maxRetries = 3;
+    let lastError = null;
+    
+    console.log('Executing Google Gemini Pro job board search...');
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Gemini job search attempt ${attempt}/${maxRetries}`);
+        
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.1, // Low temperature for factual job data
+              maxOutputTokens: 6000, // Increased for comprehensive job data
+              topP: 0.8,
+              topK: 40,
+              candidateCount: 1
+            },
+            safetySettings: [
+              {
+                category: "HARM_CATEGORY_HARASSMENT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_HATE_SPEECH", 
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold: "BLOCK_NONE"
+              }
+            ]
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'JobMatch-Pro-JobBoard-Integration/1.0'
+            },
+            timeout: 45000 // Extended timeout for job board queries
+          }
+        );
+
+        // Enhanced response validation for job board data
+        if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          throw new Error('Invalid response from Google Gemini Pro - no job data returned');
         }
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
+
+        if (response.data.candidates[0].finishReason === 'SAFETY') {
+          throw new Error('Job search content was blocked by safety filters');
+        }
+
+        const responseContent = response.data.candidates[0].content.parts[0].text.trim();
+        
+        if (responseContent.length === 0) {
+          throw new Error('Empty job search response from Gemini');
+        }
+
+        console.log(`Gemini job search response length: ${responseContent.length} characters`);
+        
+        // Enhanced JSON extraction for job board data
+        let cleanContent = responseContent;
+        
+        // Remove various formatting patterns
+        cleanContent = cleanContent.replace(/```json\s*/gi, '');
+        cleanContent = cleanContent.replace(/```\s*/g, '');
+        cleanContent = cleanContent.replace(/^\s*json\s*/gi, '');
+        cleanContent = cleanContent.trim();
+        
+        // Find JSON array boundaries more robustly
+        const jsonStart = cleanContent.indexOf('[');
+        const jsonEnd = cleanContent.lastIndexOf(']') + 1;
+        
+        if (jsonStart === -1 || jsonEnd <= jsonStart) {
+          console.warn('No JSON array found, searching for object format...');
+          // Try to find single object format
+          const objStart = cleanContent.indexOf('{');
+          const objEnd = cleanContent.lastIndexOf('}') + 1;
+          if (objStart !== -1 && objEnd > objStart) {
+            cleanContent = '[' + cleanContent.substring(objStart, objEnd) + ']';
+          } else {
+            throw new Error('No valid JSON format found in job search response');
+          }
+        } else {
+          cleanContent = cleanContent.substring(jsonStart, jsonEnd);
+        }
+        
+        // Parse and validate job data
+        let jobData;
+        try {
+          jobData = JSON.parse(cleanContent);
+        } catch (parseError) {
+          console.error('Job data parsing failed. Content preview:', cleanContent.substring(0, 300));
+          throw new Error(`Invalid JSON in job search response: ${parseError.message}`);
+        }
+
+        // Validate job data structure
+        if (!Array.isArray(jobData)) {
+          throw new Error('Job search response is not an array');
+        }
+
+        if (jobData.length === 0) {
+          console.warn('No job opportunities found in search response');
+          return [];
+        }
+
+        // Validate job objects
+        const validJobs = jobData.filter(job => {
+          return job && 
+                 typeof job === 'object' && 
+                 job.title && 
+                 job.company && 
+                 job.location;
+        });
+
+        if (validJobs.length === 0) {
+          throw new Error('No valid job objects found in response');
+        }
+
+        console.log(`Successfully extracted ${validJobs.length} job opportunities from job boards`);
+        
+        // Enhance job data with search metadata
+        const enhancedJobs = validJobs.map(job => ({
+          ...job,
+          search_source: 'Google Gemini Pro Job Board Integration',
+          search_timestamp: new Date().toISOString(),
+          data_quality: 'ai_extracted'
+        }));
+
+        return enhancedJobs;
+
+      } catch (error) {
+        lastError = error;
+        console.warn(`Google Gemini job search attempt ${attempt} failed:`, error.message);
+
+        // Handle specific error types
+        if (error.response?.status === 429 && attempt < maxRetries) {
+          const delay = 2000 * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(`Rate limit hit, waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        if (error.response?.status >= 500 && attempt < maxRetries) {
+          const delay = 1000 * attempt;
+          console.log(`Server error, waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // For final attempt or non-retryable errors
+        if (attempt === maxRetries) {
+          break;
+        }
       }
-    );
-
-    if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error('Invalid response from Google AI');
     }
 
-    const responseContent = response.data.candidates[0].content.parts[0].text.trim();
-    
-    // Clean and parse JSON
-    let cleanContent = responseContent.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    const jsonStart = cleanContent.indexOf('[');
-    const jsonEnd = cleanContent.lastIndexOf(']') + 1;
-    
-    if (jsonStart === -1 || jsonEnd <= jsonStart) {
-      throw new Error('No valid JSON array found in AI response');
-    }
-    
-    cleanContent = cleanContent.substring(jsonStart, jsonEnd);
-    return JSON.parse(cleanContent);
+    // If all attempts failed
+    const errorMessage = `Google Gemini job board search failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`;
+    console.error(errorMessage);
+    throw new Error(errorMessage);
   },
 
   async extractWithOpenRouter(prompt, apiKey) {

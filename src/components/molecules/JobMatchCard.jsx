@@ -32,16 +32,22 @@ const JobMatchCard = ({ job, className = '' }) => {
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3 flex-1">
-          {logo ? (
+{logo ? (
             <img 
               src={logo} 
               alt={`${company} logo`}
               className="w-12 h-12 rounded-lg object-cover"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
             />
-          ) : (
-            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-lg flex items-center justify-center">
-              <ApperIcon name="Building2" size={24} className="text-white" />
-            </div>
+          ) : null}
+          <div 
+            className={`w-12 h-12 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-lg flex items-center justify-center ${logo ? 'hidden' : ''}`}
+          >
+            <ApperIcon name="Building2" size={24} className="text-white" />
+          </div>
           )}
           
           <div className="flex-1 min-w-0">

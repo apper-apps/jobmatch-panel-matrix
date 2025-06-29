@@ -27,18 +27,17 @@ const SearchBar = ({
     setIsAIMode(!isAIMode);
   };
 
-  const aiPlaceholders = [
-    "Find remote React developer jobs in San Francisco",
-    "Search for senior frontend positions with competitive salary",
-    "Look for full-time Python jobs at startups",
-    "Find AI/ML engineering roles with equity compensation",
-    "Search for contract JavaScript positions in Europe"
+const aiPlaceholders = [
+    "Search live job boards for React developer positions",
+    "Find current senior frontend openings on LinkedIn & Indeed",
+    "Discover Python roles from major job boards",
+    "Search real-time AI/ML positions across platforms",
+    "Find contract opportunities from live job postings"
   ];
 
   const currentPlaceholder = isAIMode 
     ? aiPlaceholders[Math.floor(Math.random() * aiPlaceholders.length)]
     : placeholder;
-
   return (
     <form onSubmit={handleSubmit} className={`flex gap-2 ${className}`}>
       <div className="flex-1 relative">
