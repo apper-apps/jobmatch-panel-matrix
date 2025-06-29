@@ -487,7 +487,7 @@ return (
                   onClick={() => setDeleteConfirm({ show: false, jobId: null, jobTitle: '' })}
                 >
                   Cancel
-                </Button>
+</Button>
                 <Button
                   variant="danger"
                   icon="Trash2"
@@ -500,6 +500,7 @@ return (
             </motion.div>
           </div>
         )}
+      </div>
     </div>
   );
 };
