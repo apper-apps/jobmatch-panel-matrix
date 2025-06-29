@@ -16,13 +16,26 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
-
-  const loadProfile = async () => {
+  const [showApiConfig, setShowApiConfig] = useState(false);
+  const [apiSettings, setApiSettings] = useState({
+    apiKey: '',
+    apiService: 'openai'
+  });
+  const [savingApiSettings, setSavingApiSettings] = useState(false);
+const loadProfile = async () => {
     try {
       setLoading(true);
       setError('');
       const data = await userProfileService.getProfile();
       setProfile(data);
+      
+      // Load API settings if profile exists
+      if (data && data.api_key) {
+        setApiSettings({
+          apiKey: data.api_key,
+          apiService: data.api_service || 'openai'
+        });
+      }
     } catch (err) {
       setError('Failed to load profile. Please try again.');
       console.error('Error loading profile:', err);
@@ -112,10 +125,38 @@ setProfile(profileData);
     } finally {
       setUploading(false);
     }
+};
+
+  const handleSaveApiSettings = async () => {
+    if (!apiSettings.apiKey.trim()) {
+      toast.error('Please enter an API key');
+      return;
+    }
+
+    setSavingApiSettings(true);
+    try {
+      await userProfileService.updateApiSettings(apiSettings);
+      toast.success('API settings saved successfully');
+      setShowApiConfig(false);
+      // Reload profile to get updated settings
+      await loadProfile();
+    } catch (err) {
+      toast.error('Failed to save API settings');
+      console.error('Error saving API settings:', err);
+    } finally {
+      setSavingApiSettings(false);
+    }
   };
 
   const headerActions = (
     <div className="flex items-center gap-2">
+      <Button
+        variant="secondary"
+        icon="Settings"
+        onClick={() => setShowApiConfig(!showApiConfig)}
+      >
+        AI Configuration
+      </Button>
       <Button
         variant="secondary"
         icon="Download"
@@ -172,13 +213,105 @@ setProfile(profileData);
           title="Profile" 
           subtitle="Import your resume to get started"
         />
-        <div className="flex-1 p-6">
+<div className="flex-1 p-6">
           <div className="max-w-2xl mx-auto">
             <Empty
               icon="User"
               title="No profile found"
               message="Upload your resume to create your professional profile and start getting job matches."
             />
+            
+            {/* API Configuration Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6"
+            >
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <ApperIcon name="Zap" size={20} className="text-primary-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">AI-Powered Extraction</h3>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={showApiConfig ? "ChevronUp" : "ChevronDown"}
+                    onClick={() => setShowApiConfig(!showApiConfig)}
+                  >
+                    Configure
+                  </Button>
+                </div>
+                
+                <p className="text-sm text-gray-600 mb-4">
+                  Configure your AI service to extract maximum information from your resume with enhanced accuracy.
+                </p>
+                
+                {showApiConfig && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-4 pt-4 border-t border-gray-200"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          AI Service
+                        </label>
+                        <select
+                          value={apiSettings.apiService}
+                          onChange={(e) => setApiSettings(prev => ({ ...prev, apiService: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          <option value="openai">OpenAI (GPT-4)</option>
+                          <option value="google">Google (Gemini)</option>
+                          <option value="openrouter">OpenRouter</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={apiSettings.apiKey}
+                          onChange={(e) => setApiSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                          placeholder="Enter your API key"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-4">
+                      <div className="flex items-center gap-2">
+                        {apiSettings.apiKey ? (
+                          <>
+                            <ApperIcon name="CheckCircle" size={16} className="text-green-600" />
+                            <span className="text-sm text-green-600">API key configured</span>
+                          </>
+                        ) : (
+                          <>
+                            <ApperIcon name="AlertCircle" size={16} className="text-yellow-600" />
+                            <span className="text-sm text-yellow-600">Using basic extraction</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSaveApiSettings}
+                        disabled={savingApiSettings || !apiSettings.apiKey.trim()}
+                        icon={savingApiSettings ? "Loader2" : "Save"}
+                      >
+                        {savingApiSettings ? 'Saving...' : 'Save Settings'}
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
             
             <div className="mt-8">
               <FileUpload
@@ -191,7 +324,7 @@ setProfile(profileData);
                   <div className="flex items-center gap-3">
                     <ApperIcon name="Loader2" size={20} className="animate-spin text-blue-600" />
                     <span className="text-blue-800 font-medium">
-                      Processing your resume...
+                      {apiSettings.apiKey ? 'Processing with AI enhancement...' : 'Processing your resume...'}
                     </span>
                   </div>
                 </div>
@@ -210,9 +343,87 @@ setProfile(profileData);
 subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
         actions={headerActions}
       />
-      
-      <div className="flex-1 p-6">
+<div className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
+          {/* API Configuration Section for existing profiles */}
+          {showApiConfig && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="card p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <ApperIcon name="Zap" size={20} className="text-primary-600" />
+                <h3 className="text-lg font-semibold text-gray-900">AI Configuration</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    AI Service
+                  </label>
+                  <select
+                    value={apiSettings.apiService}
+                    onChange={(e) => setApiSettings(prev => ({ ...prev, apiService: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="openai">OpenAI (GPT-4)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="openrouter">OpenRouter</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={apiSettings.apiKey}
+                    onChange={(e) => setApiSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="Enter your API key"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between pt-4">
+                <div className="flex items-center gap-2">
+                  {apiSettings.apiKey ? (
+                    <>
+                      <ApperIcon name="CheckCircle" size={16} className="text-green-600" />
+                      <span className="text-sm text-green-600">AI enhancement active</span>
+                    </>
+                  ) : (
+                    <>
+                      <ApperIcon name="AlertCircle" size={16} className="text-yellow-600" />
+                      <span className="text-sm text-yellow-600">Using basic extraction</span>
+                    </>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowApiConfig(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveApiSettings}
+                    disabled={savingApiSettings || !apiSettings.apiKey.trim()}
+                    icon={savingApiSettings ? "Loader2" : "Save"}
+                  >
+                    {savingApiSettings ? 'Saving...' : 'Save Settings'}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+          
           {/* Profile Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -237,6 +448,12 @@ subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
                   <Badge variant="primary" size="sm">
                     {profile.skills?.length || 0} Skills
                   </Badge>
+                  {profile.api_key && (
+                    <Badge variant="secondary" size="sm">
+                      <ApperIcon name="Zap" size={12} className="mr-1" />
+                      AI Enhanced
+                    </Badge>
+                  )}
                 </div>
               </div>
               
