@@ -36,9 +36,10 @@ const loadProfile = async () => {
           apiService: data.api_service || 'openai'
         });
       }
-    } catch (err) {
-      setError('Failed to load profile. Please try again.');
+} catch (err) {
+      setError('Unable to load your profile. Please check your connection and try again.');
       console.error('Error loading profile:', err);
+      toast.error('Failed to load profile data');
     } finally {
       setLoading(false);
     }

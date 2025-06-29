@@ -169,8 +169,9 @@ const params = {
 
       const response = await apperClient.fetchRecords('user_profile', params);
       
-      if (!response.success) {
+if (!response.success) {
         console.error(response.message);
+        toast.error(response.message);
         return null;
       }
 
@@ -203,8 +204,9 @@ return {
         api_key: data.api_key || '',
         api_service: data.api_service || 'openai'
       };
-    } catch (error) {
+} catch (error) {
       console.error("Error fetching profile:", error);
+      toast.error("Failed to connect to the server. Please check your connection and try again.");
       return null;
     }
 },
