@@ -1,6 +1,4 @@
 import { toast } from "react-toastify";
-import React from "react";
-import Error from "@/components/ui/Error";
 import { jobPreferencesService } from "@/services/api/jobPreferencesService";
 import { userProfileService } from "@/services/api/userProfileService";
 export const jobMatchService = {
