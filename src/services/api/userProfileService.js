@@ -35,12 +35,12 @@ export const userProfileService = {
       }
 
       return {
-        name: data.Name,
+name: data.Name,
         email: data.email,
         experience: data.experience ? JSON.parse(data.experience) : [],
         education: data.education ? JSON.parse(data.education) : [],
         skills: data.skills ? data.skills.split('\n').filter(s => s.trim()) : [],
-        importedAt: data.imported_at
+        importedAt: data.imported_at ? new Date(data.imported_at).toISOString() : new Date().toISOString()
       };
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -221,12 +221,12 @@ async importResume(file) {
       });
 
       const recordData = {
-        Name: extractedData.name || 'Name not extracted',
+Name: extractedData.name || 'Name not extracted',
         email: extractedData.email || '',
         experience: extractedData.experience.length > 0 ? JSON.stringify(extractedData.experience) : '',
         education: extractedData.education.length > 0 ? JSON.stringify(extractedData.education) : '',
         skills: extractedData.skills.length > 0 ? extractedData.skills.join('\n') : '',
-        imported_at: extractedData.importedAt
+        imported_at: new Date().toISOString()
       };
 
       let response;
