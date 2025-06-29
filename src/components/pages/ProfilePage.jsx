@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
+import { AuthContext } from "@/contexts/AuthContext";
 import ApperIcon from "@/components/ApperIcon";
 import Header from "@/components/organisms/Header";
 import Badge from "@/components/atoms/Badge";
@@ -22,7 +23,8 @@ const ProfilePage = () => {
     apiService: 'openai'
   });
   const [savingApiSettings, setSavingApiSettings] = useState(false);
-const loadProfile = async () => {
+
+  const loadProfile = async () => {
     try {
       setLoading(true);
       setError('');
@@ -58,12 +60,12 @@ const loadProfile = async () => {
     if (!file.type.includes('pdf')) {
       toast.error('Please select a PDF file.');
       return;
-    }
+}
 
-setUploading(true);
+    setUploading(true);
     setError('');
 
-try {
+    try {
       const data = await userProfileService.importResume(file);
       
       if (!data) {
@@ -93,10 +95,9 @@ try {
             education = [];
           }
         }
-      } catch (e) {
+} catch (e) {
         console.warn('Failed to parse education data:', e);
         education = [];
-education = [];
       }
 
       try {
@@ -163,6 +164,12 @@ education = [];
       setSavingApiSettings(false);
     }
   };
+// Data management states
+  const [showDataManagement, setShowDataManagement] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [deletingData, setDeletingData] = useState(null);
+  const [editProfileData, setEditProfileData] = useState({});
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const headerActions = (
     <div className="flex items-center gap-2">
@@ -175,6 +182,13 @@ education = [];
       </Button>
       <Button
         variant="secondary"
+        icon="Database"
+        onClick={() => setShowDataManagement(!showDataManagement)}
+      >
+        Manage Data
+      </Button>
+      <Button
+        variant="secondary"
         icon="Download"
       >
         Export Profile
@@ -182,11 +196,165 @@ education = [];
       <Button
         variant="primary"
         icon="Edit"
+        onClick={() => {
+          setEditProfileData({
+            name: profile?.name || '',
+            email: profile?.email || '',
+            experience: profile?.experience || [],
+            education: profile?.education || [],
+            skills: profile?.skills || []
+          });
+          setEditingProfile(true);
+        }}
       >
         Edit Profile
       </Button>
     </div>
   );
+
+  // Handle profile editing
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      await userProfileService.updateProfile(editProfileData);
+      toast.success('Profile updated successfully');
+      setEditingProfile(false);
+      await loadProfile(); // Reload profile data
+    } catch (err) {
+      toast.error('Failed to update profile');
+      console.error('Error updating profile:', err);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Handle data deletion
+  const handleDeleteData = async (dataType) => {
+    if (!window.confirm(`Are you sure you want to delete all ${dataType}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingData(dataType);
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      let tableName = '';
+      switch (dataType) {
+        case 'job matches':
+          tableName = 'job_match';
+          break;
+        case 'preferences':
+          tableName = 'job_preference';
+          break;
+        case 'import logs':
+          tableName = 'import_log';
+          break;
+        case 'uploaded files':
+          tableName = 'uploaded_file';
+          break;
+        case 'PDF imports':
+          tableName = 'pdf_import_data';
+          break;
+        default:
+          throw new Error('Unknown data type');
+      }
+
+      // Get all records for this data type
+      const records = await apperClient.fetchRecords(tableName, {
+        fields: [{ field: { Name: "Id" } }],
+        pagingInfo: { limit: 1000, offset: 0 }
+      });
+
+      if (records.success && records.data?.length > 0) {
+        const recordIds = records.data.map(record => record.Id);
+        
+        const deleteResponse = await apperClient.deleteRecord(tableName, {
+          RecordIds: recordIds
+        });
+
+        if (!deleteResponse.success) {
+          throw new Error(deleteResponse.message || 'Failed to delete records');
+        }
+
+        toast.success(`Successfully deleted all ${dataType}`);
+      } else {
+        toast.info(`No ${dataType} found to delete`);
+      }
+    } catch (error) {
+      console.error(`Error deleting ${dataType}:`, error);
+      toast.error(`Failed to delete ${dataType}: ${error.message}`);
+    } finally {
+      setDeletingData(null);
+    }
+  };
+
+  // Handle complete account deletion
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('WARNING: This will permanently delete your account and ALL associated data. This action cannot be undone. Type "DELETE" to confirm.')) {
+      return;
+    }
+
+    const confirmation = prompt('Please type "DELETE" to confirm account deletion:');
+    if (confirmation !== 'DELETE') {
+      toast.error('Account deletion cancelled');
+      return;
+    }
+
+    setDeletingData('account');
+    try {
+      const { ApperClient } = window.ApperSDK;
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      });
+
+      // Delete data in order: dependent records first, then main profile
+      const tablesToDelete = [
+        'job_match',
+        'job_preference', 
+        'import_log',
+        'pdf_import_data',
+        'uploaded_file',
+        'data_extraction_config',
+        'user_profile'
+      ];
+
+      for (const tableName of tablesToDelete) {
+        try {
+          const records = await apperClient.fetchRecords(tableName, {
+            fields: [{ field: { Name: "Id" } }],
+            pagingInfo: { limit: 1000, offset: 0 }
+          });
+
+          if (records.success && records.data?.length > 0) {
+            const recordIds = records.data.map(record => record.Id);
+            
+            await apperClient.deleteRecord(tableName, {
+              RecordIds: recordIds
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to delete from ${tableName}:`, err);
+        }
+      }
+
+      toast.success('Account and all data deleted successfully');
+// Logout and redirect
+      const authContext = useContext(AuthContext);
+      if (authContext?.logout) {
+        authContext.logout();
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error(`Failed to delete account: ${error.message}`);
+    } finally {
+      setDeletingData(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -621,7 +789,181 @@ subtitle={`Last updated ${new Date(profile.imported_at).toLocaleDateString()}`}
                 </p>
               </div>
             )}
-          </motion.div>
+</motion.div>
+
+          {/* Data Management Section */}
+          {showDataManagement && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="card p-6"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <ApperIcon name="Database" size={20} className="text-red-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Data Management</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Job Matches</h4>
+                  <p className="text-sm text-gray-600 mb-3">Delete all your job match records</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="Trash2"
+                    onClick={() => handleDeleteData('job matches')}
+                    disabled={deletingData === 'job matches'}
+                  >
+                    {deletingData === 'job matches' ? 'Deleting...' : 'Delete All Matches'}
+                  </Button>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Job Preferences</h4>
+                  <p className="text-sm text-gray-600 mb-3">Delete all your job preference settings</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="Trash2"
+                    onClick={() => handleDeleteData('preferences')}
+                    disabled={deletingData === 'preferences'}
+                  >
+                    {deletingData === 'preferences' ? 'Deleting...' : 'Delete All Preferences'}
+                  </Button>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Import Logs</h4>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="Trash2"
+                    onClick={() => handleDeleteData('import logs')}
+                    disabled={deletingData === 'import logs'}
+                  >
+                    {deletingData === 'import logs' ? 'Deleting...' : 'Delete All Logs'}
+                  </Button>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Uploaded Files</h4>
+                  <p className="text-sm text-gray-600 mb-3">Delete all uploaded resume files</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="Trash2"
+                    onClick={() => handleDeleteData('uploaded files')}
+                    disabled={deletingData === 'uploaded files'}
+                  >
+                    {deletingData === 'uploaded files' ? 'Deleting...' : 'Delete All Files'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ApperIcon name="AlertTriangle" size={20} className="text-red-600" />
+                    <h4 className="font-medium text-red-900">Danger Zone</h4>
+                  </div>
+                  <p className="text-sm text-red-700 mb-4">
+                    Permanently delete your account and all associated data. This action cannot be undone.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="UserX"
+                    onClick={handleDeleteAccount}
+                    disabled={deletingData === 'account'}
+                    className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                  >
+                    {deletingData === 'account' ? 'Deleting Account...' : 'Delete Account & All Data'}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Profile Edit Modal */}
+          {editingProfile && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              >
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900">Edit Profile</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="X"
+                      onClick={() => setEditingProfile(false)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                    <input
+                      type="text"
+                      value={editProfileData.name || ''}
+                      onChange={(e) => setEditProfileData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={editProfileData.email || ''}
+                      onChange={(e) => setEditProfileData(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Skills (one per line)</label>
+                    <textarea
+                      value={editProfileData.skills?.join('\n') || ''}
+                      onChange={(e) => setEditProfileData(prev => ({ 
+                        ...prev, 
+                        skills: e.target.value.split('\n').filter(skill => skill.trim()) 
+                      }))}
+                      rows={8}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="JavaScript\nReact\nNode.js\n..."
+                    />
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setEditingProfile(false)}
+                    disabled={savingProfile}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                    icon={savingProfile ? "Loader2" : "Save"}
+                  >
+                    {savingProfile ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
         </div>
       </div>
     </div>
