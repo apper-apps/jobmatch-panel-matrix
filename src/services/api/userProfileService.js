@@ -5,7 +5,6 @@ import OpenAI from "openai";
 import axios from "axios";
 import React from "react";
 import Error from "@/components/ui/Error";
-import { importLogService } from "@/services/api/importLogService";
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js`;
