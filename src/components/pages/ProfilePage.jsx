@@ -96,12 +96,17 @@ try {
       } catch (e) {
         console.warn('Failed to parse education data:', e);
         education = [];
+education = [];
       }
 
-      if (data.skills && data.skills.trim()) {
-        skills = data.skills.split('\n').filter(s => s.trim()).slice(0, 50); // Limit skills
+      try {
+        if (data.skills && typeof data.skills === 'string' && data.skills.trim()) {
+          skills = data.skills.split('\n').filter(s => s.trim()).slice(0, 50); // Limit skills
+        }
+      } catch (e) {
+        console.warn('Failed to parse skills data:', e);
+        skills = [];
       }
-
 // Validate email format before including in profile data
       const isValidEmail = (email) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
