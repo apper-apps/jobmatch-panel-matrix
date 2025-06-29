@@ -8,113 +8,141 @@ import ErrorComponent from "@/components/ui/Error";
 // Configure PDF.js worker to use CDN-hosted worker file
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
 
-// AI service configurations
+// AI service configurations with enhanced settings for robust extraction
 const AI_SERVICES = {
   openai: {
     model: 'gpt-4o-mini',
-    baseURL: 'https://api.openai.com/v1'
+    baseURL: 'https://api.openai.com/v1',
+    maxTokens: 4000,
+    temperature: 0.1
   },
   google: {
     model: 'gemini-1.5-flash',
-    baseURL: 'https://generativelanguage.googleapis.com/v1beta'
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+    maxTokens: 4000,
+    temperature: 0.1,
+    timeout: 45000, // Extended timeout for complex documents
+    retryAttempts: 3,
+    retryDelay: 2000
   },
   openrouter: {
     model: 'meta-llama/llama-3.1-8b-instruct:free',
-    baseURL: 'https://openrouter.ai/api/v1'
+    baseURL: 'https://openrouter.ai/api/v1',
+    maxTokens: 4000,
+    temperature: 0.1
   }
 };
 
-// Enhanced AI prompt for robust resume extraction
+// Enhanced AI prompt for robust and comprehensive resume extraction
 const AI_EXTRACTION_PROMPT = `
-You are an expert resume parser with deep understanding of various resume formats. Extract ALL available information from the provided resume text and return it as a valid JSON object with the following structure:
+You are an expert AI resume parser with advanced understanding of diverse resume formats, layouts, and content structures. Your task is to extract ALL available information from the provided resume text with maximum accuracy and completeness, then return it as a perfectly formatted JSON object.
 
+TARGET JSON STRUCTURE:
 {
   "name": "Full name of the person",
   "email": "Email address",
-  "phone": "Phone number",
-  "address": "Full address or location",
+  "phone": "Phone number with country code if available",
+  "address": "Complete address or location information",
   "linkedin": "LinkedIn profile URL",
   "website": "Personal website or portfolio URL",
-  "summary": "Professional summary or objective",
+  "summary": "Professional summary, objective, or career statement",
   "experience": [
     {
-      "title": "Job title",
-      "company": "Company name",
-      "location": "Job location",
-      "duration": "Employment duration (e.g., 'Jan 2020 - Present')",
-      "description": "Job description and accomplishments"
+      "title": "Exact job title as written",
+      "company": "Complete company name",
+      "location": "Job location (city, state/country)",
+      "duration": "Employment period (e.g., 'January 2020 - Present', '2018-2022')",
+      "description": "Comprehensive job description including key achievements, responsibilities, and accomplishments"
     }
   ],
   "education": [
     {
-      "degree": "Degree type and field",
-      "institution": "School or university name",
-      "location": "Institution location",
-      "year": "Graduation year or duration",
-      "gpa": "GPA if mentioned",
-      "honors": "Any honors or distinctions"
+      "degree": "Complete degree name and field of study",
+      "institution": "Full institution name",
+      "location": "Institution location if available",
+      "year": "Graduation year or study period",
+      "gpa": "GPA or academic performance if mentioned",
+      "honors": "Academic honors, distinctions, or achievements"
     }
   ],
   "skills": [
-    "List of technical and professional skills"
+    "Comprehensive list of all technical and professional skills, including programming languages, frameworks, tools, methodologies, soft skills, and domain expertise"
   ],
   "certifications": [
     {
-      "name": "Certification name",
-      "issuer": "Issuing organization",
-      "year": "Year obtained or expires",
-      "credential_id": "Credential ID if available"
+      "name": "Full certification name",
+      "issuer": "Issuing organization or authority",
+      "year": "Year obtained, renewed, or expires",
+      "credential_id": "Certificate ID or credential number if available"
     }
   ],
   "projects": [
     {
-      "name": "Project name",
-      "description": "Project description",
-      "technologies": "Technologies used",
-      "duration": "Project duration",
-      "url": "Project URL if available"
+      "name": "Project title or name",
+      "description": "Detailed project description and scope",
+      "technologies": "Technologies, tools, and frameworks used",
+      "duration": "Project timeline or development period",
+      "url": "Project URL, GitHub link, or demo site if available"
     }
   ],
   "languages": [
     {
       "language": "Language name",
-      "proficiency": "Proficiency level"
+      "proficiency": "Proficiency level (native, fluent, conversational, basic, etc.)"
     }
   ],
   "awards": [
     {
-      "name": "Award name",
-      "issuer": "Issuing organization",
+      "name": "Award or recognition name",
+      "issuer": "Organization or entity that granted the award",
       "year": "Year received",
-      "description": "Award description"
+      "description": "Details about the award or achievement"
     }
   ]
 }
 
-CRITICAL PARSING INSTRUCTIONS:
-1. Extract ALL information present in the resume text, regardless of formatting inconsistencies
-2. If a field is not found, use null or empty array as appropriate - never use placeholder text
-3. For experience and education, include ALL entries found, even if incomplete
-4. Skills should be comprehensive - include technical skills, programming languages, frameworks, tools, soft skills, and domain expertise
-5. Preserve exact dates, company names, and titles as written - do not modify or standardize
-6. Return ONLY valid JSON, no additional text, explanation, or markdown formatting
-7. If multiple sections exist for the same category, combine them intelligently
-8. Pay special attention to formatting variations and different section names (e.g., "Work History", "Professional Experience", "Employment")
-9. Handle poorly formatted text by extracting partial information rather than failing completely
-10. For experience descriptions, capture key achievements and responsibilities even if grammar is imperfect
-11. Extract contact information from headers, footers, or contact sections regardless of position
-12. Handle multi-column layouts by processing text in logical reading order
-13. If name appears in email address format (e.g., john.doe@company.com), extract "John Doe" as the name
-14. For skills, include both explicit skill lists and skills mentioned within job descriptions
-15. Extract years, dates, and durations in their original format - include ranges like "2020-2023" or "Jan 2020 - Present"
+CRITICAL EXTRACTION REQUIREMENTS:
 
-QUALITY ASSURANCE:
-- Validate that extracted JSON is properly formatted before returning
-- Ensure arrays contain objects with consistent field structures
-- If extraction quality is poor due to document formatting, prioritize the most important fields (name, email, experience, skills)
-- Never return empty strings for missing data - use null or omit the field entirely
+ACCURACY & COMPLETENESS:
+1. Extract EVERY piece of information present in the resume, regardless of formatting inconsistencies or unconventional layouts
+2. Maintain absolute fidelity to the original text - preserve exact company names, job titles, dates, and technical terms
+3. If partial information is available for any field, include it rather than omitting the entire entry
+4. For missing fields, use null or empty arrays - NEVER use placeholder text like "Not specified" or "N/A"
 
-Resume text to parse:
+ADVANCED PARSING STRATEGIES:
+5. Handle multi-column layouts by following logical reading order and content flow
+6. Recognize and parse various section naming conventions (e.g., "Work History", "Professional Experience", "Career Summary", "Employment Record")
+7. Extract information from headers, footers, sidebars, and any other resume areas
+8. Process poorly formatted or inconsistent text by focusing on content patterns and context clues
+9. Identify and extract embedded information within narrative descriptions
+
+CONTENT-SPECIFIC GUIDELINES:
+10. EXPERIENCE: Capture all employment history including internships, freelance work, and volunteer positions
+11. SKILLS: Include technical skills, programming languages, frameworks, tools, methodologies, soft skills, and industry-specific expertise
+12. EDUCATION: Extract all educational background including degrees, certifications, courses, workshops, and training programs
+13. CONTACT INFO: Find contact details regardless of their position in the document (header, footer, contact section)
+14. DATES: Preserve exact date formats and ranges as written (e.g., "Jan 2020 - Present", "2018-2022", "Spring 2019")
+
+DATA QUALITY ASSURANCE:
+15. Validate JSON structure and ensure all brackets, quotes, and commas are properly formatted
+16. Ensure arrays contain objects with consistent field structures
+17. Cross-reference extracted information for consistency and logical coherence
+18. If name extraction is challenging, look for patterns in email addresses (e.g., john.doe@company.com → "John Doe")
+19. For poor-quality documents, prioritize essential fields: name, email, most recent experience, and key skills
+
+OUTPUT REQUIREMENTS:
+- Return ONLY the JSON object with no additional text, explanations, or markdown formatting
+- Ensure the JSON is valid and can be parsed without errors
+- Include comprehensive data while maintaining structure integrity
+- If text quality is extremely poor, extract what is possible and mark uncertain fields appropriately
+
+SPECIAL HANDLING:
+- Multi-page documents: Process all pages and combine information intelligently
+- Image-based or scanned documents: Work with the available text extraction
+- Foreign language content: Extract information while preserving original language in appropriate fields
+- Non-standard formats: Adapt parsing strategies to handle creative or unconventional resume layouts
+
+Resume text to parse and extract:
 `;
 
 export const userProfileService = {
@@ -240,75 +268,167 @@ return {
   },
 
 async extractWithGoogle(text, apiKey, config) {
-    const maxRetries = 2;
+    const maxRetries = config.retryAttempts || 3;
     let lastError = null;
+    let baseDelay = config.retryDelay || 2000;
+
+    // Pre-validate input parameters
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+      throw new Error('Invalid or missing Google API key');
+    }
+
+    if (!text || typeof text !== 'string' || text.trim().length < 10) {
+      throw new Error('Invalid or insufficient text content for extraction');
+    }
+
+    console.log(`Starting Google Gemini extraction with ${config.model}...`);
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await axios.post(
-          `${config.baseURL}/models/${config.model}:generateContent?key=${apiKey}`,
-          {
-            contents: [{
-              parts: [{
-                text: AI_EXTRACTION_PROMPT + text
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 4000,
-              topP: 0.8,
-              topK: 40
-            },
-            safetySettings: [
-              {
-                category: "HARM_CATEGORY_HARASSMENT",
-                threshold: "BLOCK_NONE"
-              },
-              {
-                category: "HARM_CATEGORY_HATE_SPEECH", 
-                threshold: "BLOCK_NONE"
-              },
-              {
-                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                threshold: "BLOCK_NONE"
-              },
-              {
-                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                threshold: "BLOCK_NONE"
-              }
-            ]
+        console.log(`Gemini extraction attempt ${attempt}/${maxRetries}`);
+        
+        // Enhanced request payload with robust configuration
+        const requestPayload = {
+          contents: [{
+            parts: [{
+              text: AI_EXTRACTION_PROMPT + text
+            }]
+          }],
+          generationConfig: {
+            temperature: config.temperature || 0.1,
+            maxOutputTokens: config.maxTokens || 4000,
+            topP: 0.8,
+            topK: 40,
+            candidateCount: 1,
+            stopSequences: []
           },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH", 
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_UNSPECIFIED",
+              threshold: "BLOCK_NONE"
+            }
+          ]
+        };
+
+        const response = await axios.post(
+          `${config.baseURL}/models/${config.model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          requestPayload,
           {
             headers: {
               'Content-Type': 'application/json',
-              'User-Agent': 'JobMatch-Pro/1.0'
+              'User-Agent': 'JobMatch-Pro/1.0',
+              'Accept': 'application/json',
+              'Accept-Encoding': 'gzip, deflate'
             },
-            timeout: 30000 // 30 second timeout
+            timeout: config.timeout || 45000,
+            maxContentLength: 50 * 1024 * 1024, // 50MB limit
+            validateStatus: (status) => status < 500 // Don't throw on 4xx errors, handle them explicitly
           }
         );
 
-        // Enhanced response validation
-        if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-          throw new Error('Invalid response structure from Google Gemini API');
+        // Comprehensive response validation
+        if (!response.data) {
+          throw new Error('Empty response from Google Gemini API');
         }
 
-        const responseContent = response.data.candidates[0].content.parts[0].text.trim();
+        if (response.data.error) {
+          const error = response.data.error;
+          throw new Error(`Gemini API Error: ${error.message || error.code || 'Unknown API error'}`);
+        }
+
+        if (!response.data.candidates || !Array.isArray(response.data.candidates) || response.data.candidates.length === 0) {
+          throw new Error('No candidates returned from Gemini API - content may have been blocked by safety filters');
+        }
+
+        const candidate = response.data.candidates[0];
         
-        // Remove markdown formatting if present
-        const cleanContent = responseContent.replace(/```json\s*|\s*```/g, '').trim();
+        // Check for finish reason that indicates issues
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+          console.warn(`Gemini finished with reason: ${candidate.finishReason}`);
+          if (candidate.finishReason === 'SAFETY') {
+            throw new Error('Content was blocked by Gemini safety filters');
+          } else if (candidate.finishReason === 'MAX_TOKENS') {
+            console.warn('Gemini response was truncated due to token limit');
+          }
+        }
+
+        if (!candidate.content?.parts?.[0]?.text) {
+          throw new Error('Invalid response structure from Google Gemini API - no text content found');
+        }
+
+        const responseContent = candidate.content.parts[0].text.trim();
         
-        // Validate JSON before parsing
+        if (responseContent.length === 0) {
+          throw new Error('Empty response content from Gemini');
+        }
+
+        console.log(`Gemini response length: ${responseContent.length} characters`);
+        
+        // Enhanced content cleaning for robust JSON extraction
+        let cleanContent = responseContent;
+        
+        // Remove various markdown formatting patterns
+        cleanContent = cleanContent.replace(/```json\s*/gi, '');
+        cleanContent = cleanContent.replace(/```\s*/g, '');
+        cleanContent = cleanContent.replace(/^\s*json\s*/gi, '');
+        cleanContent = cleanContent.trim();
+        
+        // Find JSON object boundaries more robustly
+        const jsonStart = cleanContent.indexOf('{');
+        const jsonEnd = cleanContent.lastIndexOf('}') + 1;
+        
+        if (jsonStart === -1 || jsonEnd <= jsonStart) {
+          throw new Error('No valid JSON object found in Gemini response');
+        }
+        
+        cleanContent = cleanContent.substring(jsonStart, jsonEnd);
+        
+        // Validate and parse JSON with detailed error reporting
         let parsedData;
         try {
           parsedData = JSON.parse(cleanContent);
         } catch (parseError) {
-          throw new Error(`Invalid JSON response from Gemini: ${parseError.message}`);
+          console.error('JSON parsing failed. Content preview:', cleanContent.substring(0, 200));
+          throw new Error(`Invalid JSON response from Gemini: ${parseError.message}. Content preview: ${cleanContent.substring(0, 100)}...`);
         }
 
-        // Validate the structure of parsed data
+        // Validate the structure and content quality of parsed data
         if (typeof parsedData !== 'object' || parsedData === null) {
-          throw new Error('Gemini returned invalid data structure');
+          throw new Error('Gemini returned invalid data structure - expected object');
         }
+
+        // Basic data quality validation
+        const hasValidData = parsedData.name || parsedData.email || 
+                           (Array.isArray(parsedData.experience) && parsedData.experience.length > 0) ||
+                           (Array.isArray(parsedData.skills) && parsedData.skills.length > 0);
+
+        if (!hasValidData) {
+          console.warn('Gemini extraction returned minimal useful data');
+        }
+
+        console.log(`Gemini extraction successful on attempt ${attempt}:`, {
+          name: parsedData.name ? 'Found' : 'Missing',
+          email: parsedData.email ? 'Found' : 'Missing',
+          experience: Array.isArray(parsedData.experience) ? parsedData.experience.length : 0,
+          education: Array.isArray(parsedData.education) ? parsedData.education.length : 0,
+          skills: Array.isArray(parsedData.skills) ? parsedData.skills.length : 0
+        });
 
         return parsedData;
 
@@ -316,31 +436,65 @@ async extractWithGoogle(text, apiKey, config) {
         lastError = error;
         console.warn(`Google Gemini extraction attempt ${attempt} failed:`, error.message);
 
-        // Check for specific error types that shouldn't be retried
+        // Handle specific HTTP status codes
+        if (error.response?.status === 400) {
+          throw new Error(`Invalid request to Gemini API: ${error.response.data?.error?.message || 'Bad request'}`);
+        }
         if (error.response?.status === 401) {
-          throw new Error('Invalid Google API key. Please check your API key and try again.');
+          throw new Error('Invalid Google API key. Please verify your API key is correct and has the necessary permissions.');
         }
         if (error.response?.status === 403) {
-          throw new Error('Google API access denied. Please check your API key permissions.');
+          throw new Error('Google API access denied. Please check your API key permissions and ensure the Generative AI API is enabled.');
+        }
+        if (error.response?.status === 404) {
+          throw new Error(`Gemini model '${config.model}' not found. Please check the model name is correct.`);
         }
         if (error.response?.status === 429) {
-          // Rate limit - wait before retry
+          console.warn(`Rate limit hit on attempt ${attempt}`);
           if (attempt < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+            console.log(`Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
-          throw new Error('Google API rate limit exceeded. Please try again later.');
+          throw new Error('Google API rate limit exceeded. Please try again later or check your quota.');
+        }
+        if (error.response?.status >= 500) {
+          console.warn(`Server error ${error.response.status} on attempt ${attempt}`);
+          if (attempt < maxRetries) {
+            const delay = baseDelay * attempt;
+            console.log(`Server error, waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error('Google API server error. Please try again later.');
+        }
+
+        // Handle network and timeout errors
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          console.warn(`Request timeout on attempt ${attempt}`);
+          if (attempt < maxRetries) {
+            const delay = baseDelay * attempt;
+            console.log(`Timeout error, waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error('Request timeout. The document may be too large or complex for processing.');
         }
 
         // For other errors, retry if attempts remain
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          const delay = baseDelay * attempt;
+          console.log(`Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
-    // If all retries failed
-    throw new Error(`Google Gemini extraction failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
+    // If all retries failed, provide comprehensive error information
+    const errorMessage = `Google Gemini extraction failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`;
+    console.error(errorMessage);
+    throw new Error(errorMessage);
   },
 
   async extractWithOpenRouter(text, apiKey, config) {
@@ -463,20 +617,51 @@ async extractWithGoogle(text, apiKey, config) {
       };
       let aiExtractionUsed = false;
 try {
-        // Load PDF document using PDF.js with enhanced error handling
-        const pdfDocument = await pdfjsLib.getDocument({ 
+        // Enhanced PDF document loading with comprehensive error handling
+        console.log('Loading PDF document with enhanced configuration...');
+        
+        const loadingTask = pdfjsLib.getDocument({ 
           data: fileContent,
           verbosity: 0, // Reduce PDF.js console output
-          standardFontDataUrl: new URL('pdfjs-dist/standard_fonts', import.meta.url).toString()
-        }).promise;
+          standardFontDataUrl: new URL('pdfjs-dist/standard_fonts', import.meta.url).toString(),
+          // Enhanced loading parameters for robust PDF processing
+          maxImageSize: 1024 * 1024, // 1MB max image size
+          disableFontFace: false,
+          disableRange: false,
+          disableStream: false,
+          isEvalSupported: true,
+          fontExtraProperties: false,
+          enableXfa: false,
+          ownerDocument: document,
+          disableAutoFetch: false,
+          disableCreateObjectURL: false
+        });
         
+        // Add progress tracking for large documents
+        loadingTask.onProgress = (progress) => {
+          if (progress.total > 0) {
+            const percent = Math.round((progress.loaded / progress.total) * 100);
+            console.log(`PDF loading progress: ${percent}%`);
+          }
+        };
+        
+        const pdfDocument = await loadingTask.promise;
         pageCount = pdfDocument.numPages;
-        console.log(`Processing PDF with ${pageCount} pages...`);
+        console.log(`Successfully loaded PDF with ${pageCount} pages`);
 
-        // Extract text from each page with individual error handling
+        // Validate document structure
+        if (pageCount === 0) {
+          throw new Error('PDF document contains no pages');
+        }
+        
+        if (pageCount > 50) {
+          console.warn(`Large document detected (${pageCount} pages) - processing may take longer`);
+        }
+
+        // Extract text from each page with enhanced error handling and progress tracking
         const pageTexts = [];
         const failedPages = [];
-        
+        const extractionWarnings = [];
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
           try {
             const page = await pdfDocument.getPage(pageNum);
@@ -517,28 +702,65 @@ try {
         }
 
         // Validate text quality
+// Enhanced text quality validation and assessment
         if (!extractedText.trim()) {
-          throw new Error('No text content found in PDF. The file may be image-based, corrupted, or password-protected.');
+          throw new Error('No text content found in PDF. The file may be image-based, corrupted, password-protected, or contain only images/graphics.');
         }
         
-        if (extractedText.length < 50) {
-          extractionErrors.push('Very little text content extracted - PDF may be image-based or poorly formatted');
-        }
-
-        // Text quality assessment
+        // Comprehensive text quality assessment with detailed metrics
         const textQuality = {
           totalLength: extractedText.length,
-          wordCount: extractedText.split(/\s+/).length,
+          wordCount: extractedText.split(/\s+/).filter(word => word.length > 0).length,
+          lineCount: extractedText.split('\n').length,
+          characterDensity: extractedText.length / pageCount,
           hasEmail: /@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(extractedText),
           hasPhonePattern: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(extractedText),
           hasDatePattern: /\b\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(extractedText),
+          hasCommonSections: {
+            experience: /\b(?:experience|work|employment|career|professional)\b/i.test(extractedText),
+            education: /\b(?:education|academic|university|college|degree)\b/i.test(extractedText),
+            skills: /\b(?:skills|technical|competencies|abilities)\b/i.test(extractedText),
+            contact: /\b(?:contact|phone|email|address)\b/i.test(extractedText)
+          },
           successfulPages: pageTexts.length,
-          failedPages: failedPages.length
+          failedPages: failedPages.length,
+          extractionWarnings: extractionWarnings.length
         };
         
-        console.log('PDF text extraction quality assessment:', textQuality);
-        if (!extractedText.trim()) {
-          throw new Error('No text content found in PDF. The file may be image-based or corrupted.');
+        // Calculate quality score
+        let qualityScore = 0;
+        if (textQuality.totalLength > 100) qualityScore += 20;
+        if (textQuality.wordCount > 50) qualityScore += 15;
+        if (textQuality.hasEmail) qualityScore += 15;
+        if (textQuality.hasCommonSections.experience) qualityScore += 15;
+        if (textQuality.hasCommonSections.education) qualityScore += 10;
+        if (textQuality.hasCommonSections.skills) qualityScore += 15;
+        if (textQuality.hasDatePattern) qualityScore += 10;
+        
+        textQuality.score = qualityScore;
+        textQuality.quality = qualityScore >= 80 ? 'excellent' : 
+                             qualityScore >= 60 ? 'good' : 
+                             qualityScore >= 40 ? 'fair' : 'poor';
+        
+        console.log('Enhanced PDF text extraction quality assessment:', textQuality);
+        
+        // Provide specific warnings based on quality assessment
+        if (textQuality.totalLength < 50) {
+          extractionErrors.push('Very little text content extracted - PDF may be image-based, scanned, or poorly formatted');
+        }
+        if (textQuality.characterDensity < 20) {
+          extractionWarnings.push('Low character density suggests possible image-based content or sparse formatting');
+        }
+        if (!textQuality.hasEmail && !textQuality.hasCommonSections.contact) {
+          extractionWarnings.push('No contact information patterns detected');
+        }
+        if (!textQuality.hasCommonSections.experience && !textQuality.hasCommonSections.education) {
+          extractionWarnings.push('No common resume sections detected - document may not be a standard resume');
+        }
+        
+        if (extractionWarnings.length > 0) {
+          console.warn('PDF extraction warnings:', extractionWarnings);
+          extractionErrors.push(...extractionWarnings);
         }
 
 // Try AI extraction first if API key is available
