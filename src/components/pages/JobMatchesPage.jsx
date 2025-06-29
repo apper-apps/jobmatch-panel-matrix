@@ -13,7 +13,7 @@ import { jobMatchService } from "@/services/api/jobMatchService";
 
 const JobMatchesPage = () => {
   const [jobs, setJobs] = useState([]);
-const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [aiSearching, setAiSearching] = useState(false);
   const [lastSearchType, setLastSearchType] = useState('manual');
@@ -26,14 +26,30 @@ const [loading, setLoading] = useState(true);
     workArrangement: 'all'
   });
 
-  const loadJobs = async () => {
+const loadJobs = async () => {
     try {
       setLoading(true);
       setError('');
       const data = await jobMatchService.getAll();
-      setJobs(data);
+      
+      // Check if we received data or if database might not be connected
+      if (!data || data.length === 0) {
+        // This could indicate database connectivity issues
+        setError('Database connection may not be available. Please check your connection or contact support.');
+      } else {
+        setJobs(data);
+      }
     } catch (err) {
-      setError('Failed to load job matches. Please try again.');
+      // Enhanced error detection for database connectivity
+      if (err.message?.includes('authentication') || err.message?.includes('unauthorized') || err.message?.includes('401')) {
+        setError('Database authentication failed. Please check your connection and try again.');
+      } else if (err.message?.includes('network') || err.message?.includes('timeout') || err.message?.includes('connection')) {
+        setError('Database connection failed. Please check your network connection and try again.');
+      } else if (err.message?.includes('server') || err.message?.includes('500')) {
+        setError('Database server is not responding. Please try again later or contact support.');
+      } else {
+        setError('Failed to load job matches from database. Please check your connection and try again.');
+      }
       console.error('Error loading jobs:', err);
     } finally {
       setLoading(false);
@@ -120,7 +136,7 @@ const handleSearch = (searchTerm) => {
     setLastSearchType('manual');
   };
 
-  const handleAISearch = async (searchQuery) => {
+const handleAISearch = async (searchQuery) => {
     try {
       setAiSearching(true);
       setError('');
@@ -133,14 +149,23 @@ const handleSearch = (searchTerm) => {
       setFilters(prev => ({ ...prev, search: searchQuery }));
       
     } catch (err) {
-      setError('AI job search failed. Please try again or check your AI configuration.');
+      // Enhanced error handling for AI search
+      if (err.message?.includes('AI API key not configured')) {
+        setError('AI is not configured. Please set up your AI API key in the Profile section to use AI job search.');
+      } else if (err.message?.includes('database') || err.message?.includes('connection') || err.message?.includes('authentication')) {
+        setError('Database connection failed during AI search. Please check your connection and try again.');
+      } else if (err.message?.includes('network') || err.message?.includes('timeout')) {
+        setError('Network error during AI job search. Please check your connection and try again.');
+      } else {
+        setError('AI job search failed. Please check your AI configuration in the Profile section and try again.');
+      }
       console.error('AI search error:', err);
     } finally {
       setAiSearching(false);
     }
   };
 
-  const handleAIJobDiscovery = async () => {
+const handleAIJobDiscovery = async () => {
     try {
       setAiSearching(true);
       setError('');
@@ -153,9 +178,18 @@ const handleSearch = (searchTerm) => {
       setFilters(prev => ({ ...prev, search: '' }));
       
     } catch (err) {
-      setError('AI job discovery failed. Please check your AI configuration and try again.');
+      // Enhanced error handling for AI discovery
+      if (err.message?.includes('AI API key not configured')) {
+        setError('AI is not configured. Please set up your AI API key in the Profile section to use AI job discovery.');
+      } else if (err.message?.includes('database') || err.message?.includes('connection') || err.message?.includes('authentication')) {
+        setError('Database connection failed during AI discovery. Please check your connection and try again.');
+      } else if (err.message?.includes('network') || err.message?.includes('timeout')) {
+        setError('Network error during AI job discovery. Please check your connection and try again.');
+      } else {
+        setError('AI job discovery failed. Please check your AI configuration in the Profile section and try again.');
+      }
       console.error('AI discovery error:', err);
-} finally {
+    } finally {
       setAiSearching(false);
     }
   };
@@ -221,9 +255,6 @@ const handleSearch = (searchTerm) => {
       >
         AI Job Discovery
       </Button>
-      <Button
-        variant="primary"
-        icon="Filter"
 <Button
         variant="primary"
         icon="Filter"
@@ -232,6 +263,10 @@ const handleSearch = (searchTerm) => {
       </Button>
     </div>
   );
+
+if (loading) {
+    return (
+      <div className="h-full flex flex-col">
         <Header 
           title="Job Matches" 
           subtitle="Finding your perfect career opportunities"
@@ -351,16 +386,16 @@ return (
           </div>
           
           {/* AI Search Status */}
-          {aiSearching && (
+{aiSearching && (
             <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
               <div className="flex items-center gap-3">
                 <ApperIcon name="Loader2" size={20} className="animate-spin text-blue-600" />
                 <div>
                   <div className="text-blue-800 font-medium">
-                    {lastSearchType === 'discovery' ? 'AI is discovering new job opportunities...' : 'AI is searching for relevant positions...'}
+                    {lastSearchType === 'discovery' ? 'AI is discovering new job opportunities from database...' : 'AI is searching for relevant positions in database...'}
                   </div>
                   <div className="text-blue-600 text-sm">
-                    Using your profile and preferences to find the best matches
+                    Using your profile and preferences to find the best matches from job database
                   </div>
                 </div>
               </div>
