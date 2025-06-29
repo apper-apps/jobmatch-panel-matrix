@@ -9,28 +9,28 @@ export const jobMatchService = {
         apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
       });
 
-      const params = {
-        fields: [
-          { field: { Name: "Name" } },
-          { field: { Name: "title" } },
-          { field: { Name: "company" } },
-          { field: { Name: "location" } },
-          { field: { Name: "salary" } },
-          { field: { Name: "profile_match" } },
-          { field: { Name: "preference_match" } },
-          { field: { Name: "work_arrangement" } },
-          { field: { Name: "job_type" } },
-          { field: { Name: "description" } },
-          { field: { Name: "company_description" } },
-          { field: { Name: "url" } },
-          { field: { Name: "logo" } },
-          { field: { Name: "posted_date" } },
-          { field: { Name: "benefits" } }
+const params = {
+        "fields": [
+          { "field": { "Name": "Name" } },
+          { "field": { "Name": "title" } },
+          { "field": { "Name": "company" } },
+          { "field": { "Name": "location" } },
+          { "field": { "Name": "salary" } },
+          { "field": { "Name": "profile_match" } },
+          { "field": { "Name": "preference_match" } },
+          { "field": { "Name": "work_arrangement" } },
+          { "field": { "Name": "job_type" } },
+          { "field": { "Name": "description" } },
+          { "field": { "Name": "company_description" } },
+          { "field": { "Name": "url" } },
+          { "field": { "Name": "logo" } },
+          { "field": { "Name": "posted_date" } },
+          { "field": { "Name": "benefits" } }
         ],
-        orderBy: [
-          { fieldName: "posted_date", sorttype: "DESC" }
+        "orderBy": [
+          { "fieldName": "posted_date", "sorttype": "DESC" }
         ],
-        pagingInfo: { limit: 50, offset: 0 }
+        "pagingInfo": { "limit": 50, "offset": 0 }
       };
 
       const response = await apperClient.fetchRecords('job_match', params);
@@ -57,23 +57,23 @@ export const jobMatchService = {
         apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
       });
 
-      const params = {
-        fields: [
-          { field: { Name: "Name" } },
-          { field: { Name: "title" } },
-          { field: { Name: "company" } },
-          { field: { Name: "location" } },
-          { field: { Name: "salary" } },
-          { field: { Name: "profile_match" } },
-          { field: { Name: "preference_match" } },
-          { field: { Name: "work_arrangement" } },
-          { field: { Name: "job_type" } },
-          { field: { Name: "description" } },
-          { field: { Name: "company_description" } },
-          { field: { Name: "url" } },
-          { field: { Name: "logo" } },
-          { field: { Name: "posted_date" } },
-          { field: { Name: "benefits" } }
+const params = {
+        "fields": [
+          { "field": { "Name": "Name" } },
+          { "field": { "Name": "title" } },
+          { "field": { "Name": "company" } },
+          { "field": { "Name": "location" } },
+          { "field": { "Name": "salary" } },
+          { "field": { "Name": "profile_match" } },
+          { "field": { "Name": "preference_match" } },
+          { "field": { "Name": "work_arrangement" } },
+          { "field": { "Name": "job_type" } },
+          { "field": { "Name": "description" } },
+          { "field": { "Name": "company_description" } },
+          { "field": { "Name": "url" } },
+          { "field": { "Name": "logo" } },
+          { "field": { "Name": "posted_date" } },
+          { "field": { "Name": "benefits" } }
         ]
       };
 
