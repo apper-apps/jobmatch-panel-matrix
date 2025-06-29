@@ -382,7 +382,7 @@ const addNegativeKeyword = () => {
               </Button>
             </div>
             
-            {preferences.locations.length > 0 && (
+{preferences.locations.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {preferences.locations.map((location, index) => (
                   <Badge
@@ -487,7 +487,7 @@ const addNegativeKeyword = () => {
                 </Button>
               </div>
               
-              {preferences.positiveKeywords.length > 0 && (
+{preferences.positiveKeywords.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {preferences.positiveKeywords.map((keyword, index) => (
                     <Badge
@@ -535,7 +535,7 @@ const addNegativeKeyword = () => {
                 </Button>
               </div>
               
-              {preferences.negativeKeywords.length > 0 && (
+{preferences.negativeKeywords.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {preferences.negativeKeywords.map((keyword, index) => (
                     <Badge
