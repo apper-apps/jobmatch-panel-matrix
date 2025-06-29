@@ -14,6 +14,7 @@ const PreferencesPage = () => {
 const [preferences, setPreferences] = useState({
     minSalary: '',
     currency: '',
+    salaryType: '',
     locations: [],
     jobTypes: [],
     workArrangements: [],
@@ -260,10 +261,41 @@ const addNegativeKeyword = () => {
               <h3 className="text-lg font-semibold text-gray-900">Salary Expectations</h3>
             </div>
             
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+{/* Salary Type Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Salary Type
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="salaryType"
+                    value="Base Salary"
+                    checked={preferences.salaryType === 'Base Salary'}
+                    onChange={(e) => setPreferences(prev => ({ ...prev, salaryType: e.target.value }))}
+                    className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-gray-700">Base Salary</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="salaryType"
+                    value="Total Compensation"
+                    checked={preferences.salaryType === 'Total Compensation'}
+                    onChange={(e) => setPreferences(prev => ({ ...prev, salaryType: e.target.value }))}
+                    className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-gray-700">Total Compensation</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <Input
-                  label="Base Annual Salary (Gross)"
+                  label={`${preferences.salaryType || 'Salary'} Expectations (Gross per year)`}
                   type="number"
                   placeholder="e.g., 80000"
                   value={preferences.minSalary}
@@ -292,11 +324,25 @@ const addNegativeKeyword = () => {
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
                 <ApperIcon name="Info" size={16} className="inline mr-1 text-blue-600" />
                 <div className="space-y-1">
-                  <div className="font-medium">Gross annual base salary</div>
+                  <div className="font-medium">
+                    {preferences.salaryType === 'Total Compensation' 
+                      ? 'Total Compensation includes:' 
+                      : 'Base Salary includes:'}
+                  </div>
                   <div className="text-xs text-blue-600">
-                    • Before taxes and deductions<br/>
-                    • Excludes bonuses, equity, benefits<br/>
-                    • Upper limit open for negotiation
+                    {preferences.salaryType === 'Total Compensation' ? (
+                      <>
+                        • Base salary + bonuses + equity + benefits<br/>
+                        • Complete compensation package value<br/>
+                        • All forms of monetary compensation
+                      </>
+                    ) : (
+                      <>
+                        • Fixed annual salary before taxes<br/>
+                        • Excludes bonuses, equity, benefits<br/>
+                        • Core salary component only
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

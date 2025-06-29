@@ -1,4 +1,5 @@
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
+import React from "react";
 
 export const jobPreferencesService = {
   async getPreferences() {
@@ -14,6 +15,7 @@ const params = {
           { field: { Name: "Name" } },
           { field: { Name: "min_salary" } },
           { field: { Name: "currency1" } },
+          { field: { Name: "salary_type" } },
           { field: { Name: "locations" } },
           { field: { Name: "job_types" } },
           { field: { Name: "work_arrangements" } },
@@ -31,6 +33,7 @@ const params = {
 return {
           minSalary: '',
           currency: '',
+          salaryType: '',
           locations: [],
           jobTypes: [],
           workArrangements: [],
@@ -44,17 +47,19 @@ return {
 return {
           minSalary: '',
           currency: '',
+          salaryType: '',
           locations: [],
           jobTypes: [],
           workArrangements: [],
           positiveKeywords: [],
           negativeKeywords: []
-        };
+};
       }
 
-return {
+      return {
         minSalary: data.min_salary || '',
         currency: data.currency1 || '',
+        salaryType: data.salary_type || '',
         locations: data.locations ? data.locations.split('\n').filter(l => l.trim()) : [],
         jobTypes: data.job_types ? data.job_types.split(',').filter(t => t.trim()) : [],
         workArrangements: data.work_arrangements ? data.work_arrangements.split(',').filter(a => a.trim()) : [],
@@ -86,6 +91,7 @@ const recordData = {
         Name: 'User Preferences',
         min_salary: preferences.minSalary || 0,
         currency1: preferences.currency || '',
+        salary_type: preferences.salaryType || '',
         locations: preferences.locations?.join('\n') || '',
         job_types: preferences.jobTypes?.join(',') || '',
         work_arrangements: preferences.workArrangements?.join(',') || '',
@@ -147,6 +153,7 @@ const recordData = {
 const defaultPreferences = {
         minSalary: '',
         currency: '',
+        salaryType: '',
         locations: [],
         jobTypes: [],
         workArrangements: [],
