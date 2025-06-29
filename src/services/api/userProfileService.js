@@ -530,7 +530,7 @@ async extractWithGoogle(text, apiKey, config) {
     return JSON.parse(responseContent);
   },
 
-  async importResume(file) {
+async importResume(file) {
     try {
       const { ApperClient } = window.ApperSDK;
       const apperClient = new ApperClient({
@@ -538,13 +538,13 @@ async extractWithGoogle(text, apiKey, config) {
         apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
       });
       
-// Validate file type
+      // Validate file type
       if (!file || file.type !== 'application/pdf') {
         throw new Error('Please upload a valid PDF file');
       }
 
       // Get current API settings
-      let apiSettings = { apiKey: '', apiService: 'openai' };
+      let apiSettings = { apiKey: '', apiService: 'google' }; // Default to Google Gemini Flash
       try {
         const existingProfile = await apperClient.fetchRecords('user_profile', {
           fields: [
@@ -556,13 +556,13 @@ async extractWithGoogle(text, apiKey, config) {
 
         if (existingProfile.success && existingProfile.data?.length > 0) {
           apiSettings.apiKey = existingProfile.data[0].api_key || '';
-          apiSettings.apiService = existingProfile.data[0].api_service || 'openai';
+          apiSettings.apiService = existingProfile.data[0].api_service || 'google';
         }
       } catch (err) {
         console.warn('Could not load API settings:', err);
       }
 
-      // Read PDF file content as ArrayBuffer
+      // Read PDF file content as ArrayBuffer and Base64 for complete storage
       const fileReader = new FileReader();
       const fileContent = await new Promise((resolve, reject) => {
         fileReader.onload = (e) => resolve(e.target.result);
@@ -570,7 +570,38 @@ async extractWithGoogle(text, apiKey, config) {
         fileReader.readAsArrayBuffer(file);
       });
 
-      // Store PDF import data first
+      // Read file as text content for storage
+      const fileTextReader = new FileReader();
+      const fileContentText = await new Promise((resolve, reject) => {
+        fileTextReader.onload = (e) => resolve(e.target.result);
+        fileTextReader.onerror = (e) => reject(new Error('Failed to read PDF file content'));
+        fileTextReader.readAsDataURL(file);
+      });
+
+      // Save uploaded file locally first with complete metadata
+      console.log('Saving uploaded file locally...');
+      const uploadedFileParams = {
+        records: [{
+          Name: `Resume Upload - ${file.name}`,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          upload_date: new Date().toISOString(),
+          file_content: fileContentText // Store complete file content
+        }]
+      };
+
+      const uploadedFileResponse = await apperClient.createRecord('uploaded_file', uploadedFileParams);
+      let uploadedFileId = null;
+
+      if (uploadedFileResponse.success && uploadedFileResponse.results?.[0]?.success) {
+        uploadedFileId = uploadedFileResponse.results[0].data.Id;
+        console.log(`File saved locally with ID: ${uploadedFileId}`);
+      } else {
+        console.warn('Failed to save file locally, continuing with processing...');
+      }
+
+      // Store PDF import data for tracking
       const pdfImportParams = {
         records: [{
           Name: `PDF Import - ${file.name}`,
@@ -617,7 +648,8 @@ async extractWithGoogle(text, apiKey, config) {
         imported_at: new Date().toISOString()
       };
       let aiExtractionUsed = false;
-try {
+      
+      try {
         // Enhanced PDF document loading with comprehensive error handling
         console.log('Loading PDF document with enhanced configuration...');
         
@@ -1085,20 +1117,34 @@ try {
             console.info('Extraction improvement suggestions:', extractionSummary.suggestions);
           }
         }
-      // Check if profile exists
+// Check if profile exists
       const existingResponse = await apperClient.fetchRecords('user_profile', {
         fields: [{ field: { Name: "Id" } }],
         pagingInfo: { limit: 1, offset: 0 }
       });
 
+      // Prepare profile data with enhanced validation
       const recordData = {
         Name: extractedData.name || 'Name not extracted',
         email: extractedData.email || '',
         experience: extractedData.experience.length > 0 ? JSON.stringify(extractedData.experience) : '',
         education: extractedData.education.length > 0 ? JSON.stringify(extractedData.education) : '',
         skills: extractedData.skills.length > 0 ? extractedData.skills.join('\n') : '',
-        imported_at: new Date().toISOString()
+        imported_at: new Date().toISOString(),
+        ai_processing_result: JSON.stringify({
+          extractionSource: aiExtractionUsed ? `AI (${apiSettings.apiService})` : 'PDF.js parsing',
+          uploadedFileId: uploadedFileId,
+          extractionQuality: extractionQuality?.quality || 'unknown',
+          extractionScore: extractionQuality?.score || 0,
+          aiEnhanced: aiExtractionUsed,
+          processedAt: new Date().toISOString()
+        })
       };
+
+      // Link to uploaded file if available
+      if (uploadedFileId) {
+        recordData.uploaded_file = uploadedFileId;
+      }
 
       let response;
 
@@ -1119,28 +1165,66 @@ try {
         response = await apperClient.createRecord('user_profile', params);
       }
       
-if (!response.success) {
-        console.error(response.message);
-        toast.error(response.message);
+      if (!response.success) {
+        console.error('Profile save failed:', response.message);
+        
+        // Handle specific email validation errors
+        if (response.message && response.message.toLowerCase().includes('email')) {
+          toast.error('Email validation failed. Please ensure your resume contains a valid email address, or manually add one to your profile after upload.');
+        } else {
+          toast.error(`Failed to save profile: ${response.message}`);
+        }
         return null;
       }
 
-if (response.results) {
+      if (response.results) {
         const failedRecords = response.results.filter(result => !result.success);
         
         if (failedRecords.length > 0) {
           console.error(`Failed to save profile:${JSON.stringify(failedRecords)}`);
           
+          // Enhanced error handling for common validation failures
+          let hasEmailError = false;
+          let hasNameError = false;
+          
           failedRecords.forEach(record => {
             record.errors?.forEach(error => {
-              toast.error(`${error.fieldLabel}: ${error.message}`);
+              if (error.fieldLabel && error.fieldLabel.toLowerCase().includes('email')) {
+                hasEmailError = true;
+                toast.error(`Email validation failed: ${error.message}. Please ensure your resume contains a valid email address.`);
+              } else if (error.fieldLabel && error.fieldLabel.toLowerCase().includes('name')) {
+                hasNameError = true;
+                toast.error(`Name validation failed: ${error.message}. Please ensure your name is clearly visible in your resume.`);
+              } else {
+                toast.error(`${error.fieldLabel}: ${error.message}`);
+              }
             });
-            if (record.message) toast.error(record.message);
+            
+            if (record.message) {
+              if (record.message.toLowerCase().includes('email')) {
+                hasEmailError = true;
+                toast.error('Email validation error. Your profile has been partially saved. Please review and update your email address manually.');
+              } else {
+                toast.error(record.message);
+              }
+            }
           });
-          return null;
+          
+          // Provide specific guidance for common issues
+          if (hasEmailError) {
+            console.warn('Email validation failed - profile may be partially saved');
+            toast.warning('Your resume has been processed but email validation failed. You can manually update your email in the profile section.');
+          }
+          
+          if (hasNameError) {
+            console.warn('Name validation failed - profile may be partially saved');
+            toast.warning('Your resume has been processed but name validation failed. You can manually update your name in the profile section.');
+          }
+          
+          // Return partial data for profile display even if save failed
+          return extractedData;
         }
       }
-
 // Log the actual import results
       const logStatus = extractionErrors.length > 0 ? (extractedData.name || extractedData.email ? 'warning' : 'error') : 'success';
       await importLogService.create({
