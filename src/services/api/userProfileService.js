@@ -1119,13 +1119,13 @@ try {
         response = await apperClient.createRecord('user_profile', params);
       }
       
-      if (!response.success) {
+if (!response.success) {
         console.error(response.message);
         toast.error(response.message);
-        throw new Error('Failed to save profile');
+        return null;
       }
 
-      if (response.results) {
+if (response.results) {
         const failedRecords = response.results.filter(result => !result.success);
         
         if (failedRecords.length > 0) {
@@ -1137,7 +1137,7 @@ try {
             });
             if (record.message) toast.error(record.message);
           });
-          throw new Error('Failed to save profile');
+          return null;
         }
       }
 
@@ -1211,14 +1211,14 @@ try {
 
       const response = await apperClient.updateRecord('user_profile', params);
       
-      if (!response.success) {
+if (!response.success) {
         console.error(response.message);
         toast.error(response.message);
-        throw new Error('Failed to update profile');
+        return null;
       }
 
       if (response.results) {
-        const failedRecords = response.results.filter(result => !result.success);
+const failedRecords = response.results.filter(result => !result.success);
         
         if (failedRecords.length > 0) {
           console.error(`Failed to update profile:${JSON.stringify(failedRecords)}`);
@@ -1229,7 +1229,7 @@ try {
             });
             if (record.message) toast.error(record.message);
           });
-          throw new Error('Failed to update profile');
+          return null;
         }
       }
 
@@ -1280,15 +1280,13 @@ try {
       }
 
       if (!response.success) {
-        console.error(response.message);
+console.error(response.message);
         toast.error(response.message);
-        throw new Error('Failed to save API settings');
+        return null;
       }
-
       if (response.results) {
         const failedRecords = response.results.filter(result => !result.success);
-        
-        if (failedRecords.length > 0) {
+if (failedRecords.length > 0) {
           console.error(`Failed to save API settings:${JSON.stringify(failedRecords)}`);
           
           failedRecords.forEach(record => {
@@ -1297,10 +1295,9 @@ try {
             });
             if (record.message) toast.error(record.message);
           });
-          throw new Error('Failed to save API settings');
+          return null;
         }
       }
-
       return { success: true };
     } catch (error) {
       console.error("Error updating API settings:", error);
