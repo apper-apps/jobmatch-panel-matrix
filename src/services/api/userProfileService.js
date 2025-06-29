@@ -157,18 +157,55 @@ async importResume(file) {
           throw new Error('No text content found in PDF. The file may be image-based or corrupted.');
         }
 
-        // Use actual parsing logic based on configuration
-        const nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i) ||
-                           extractedText.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)/m);
+// Use actual parsing logic based on configuration with multiple fallback patterns
+        
+        // Enhanced name extraction with multiple strategies
+        let nameMatches = extractedText.match(/(?:Name|Full Name):\s*([^\n\r]+)/i);
+        
+        if (!nameMatches) {
+          // Try to find name in first few lines (common in resume headers)
+          const firstLines = extractedText.split('\n').slice(0, 5);
+          for (const line of firstLines) {
+            const lineNameMatch = line.trim().match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*\s+[A-Z][a-z]+)$/);
+            if (lineNameMatch && lineNameMatch[1].length > 5 && lineNameMatch[1].length < 50) {
+              nameMatches = lineNameMatch;
+              break;
+            }
+          }
+        }
+        
+        if (!nameMatches) {
+          // Try contact section
+          const contactSection = extractedText.match(/(?:Contact|Personal Information)(.*?)(?:Experience|Education|Skills|Summary)/si);
+          if (contactSection) {
+            nameMatches = contactSection[1].match(/([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+          }
+        }
+        
+        if (!nameMatches) {
+          // Try general pattern for names at beginning of lines
+          nameMatches = extractedText.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)/m);
+        }
+        
         if (nameMatches) {
           extractedData.name = nameMatches[1].trim();
         } else {
           extractionErrors.push('Name not found in PDF content');
         }
 
-        const emailMatches = extractedText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        // Enhanced email extraction with multiple strategies
+        let emailMatches = extractedText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        
+        if (!emailMatches) {
+          // Try contact section specific search
+          const contactSection = extractedText.match(/(?:Contact|Email|Personal Information)(.*?)(?:Experience|Education|Skills|Summary)/si);
+          if (contactSection) {
+            emailMatches = contactSection[1].match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+          }
+        }
+        
         if (emailMatches) {
-          extractedData.email = emailMatches[0];
+          extractedData.email = emailMatches[0].trim();
         } else {
           extractionErrors.push('Email address not found in PDF content');
         }
@@ -259,9 +296,23 @@ async importResume(file) {
       }
 
       // Validate that we have minimum required data
+// More forgiving validation - require at least one essential field
       if (!extractedData.name && !extractedData.email) {
-        throw new Error('Unable to extract essential profile information from PDF. Please ensure the PDF contains clearly formatted name and contact information.');
+        const missingFields = [];
+        if (!extractedData.name) missingFields.push('name');
+        if (!extractedData.email) missingFields.push('email address');
+        
+        throw new Error(`Unable to extract essential profile information from PDF. Missing: ${missingFields.join(', ')}. Please ensure the PDF contains clearly formatted contact information in the header section or a dedicated contact area.`);
       }
+      
+      // Log what was successfully extracted for debugging
+      console.log('PDF extraction results:', {
+        name: extractedData.name ? 'Found' : 'Missing',
+        email: extractedData.email ? 'Found' : 'Missing',
+        experience: extractedData.experience.length,
+        education: extractedData.education.length,
+        skills: extractedData.skills.length
+      });
 
       // Check if profile exists
       const existingResponse = await apperClient.fetchRecords('user_profile', {
