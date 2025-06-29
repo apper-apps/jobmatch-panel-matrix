@@ -26,6 +26,37 @@ const PreferencesPage = () => {
   const [newPositiveKeyword, setNewPositiveKeyword] = useState('');
   const [newNegativeKeyword, setNewNegativeKeyword] = useState('');
 
+  // Suggestion arrays
+  const locationSuggestions = [
+    'New York, NY', 'San Francisco, CA', 'Seattle, WA', 'Austin, TX', 'Boston, MA',
+    'Los Angeles, CA', 'Chicago, IL', 'Denver, CO', 'Atlanta, GA', 'Miami, FL',
+    'London, UK', 'Berlin, Germany', 'Toronto, Canada', 'Sydney, Australia',
+    'Amsterdam, Netherlands', 'Paris, France', 'Tokyo, Japan', 'Singapore',
+    'Remote', 'Worldwide', 'United States', 'Europe', 'North America',
+    'San Jose, CA', 'Palo Alto, CA', 'Mountain View, CA', 'Portland, OR',
+    'Washington, DC', 'Philadelphia, PA', 'Dallas, TX', 'Houston, TX'
+  ];
+
+  const keywordSuggestions = [
+    // Technologies
+    'React', 'JavaScript', 'TypeScript', 'Node.js', 'Python', 'Java', 'AWS',
+    'Docker', 'Kubernetes', 'GraphQL', 'MongoDB', 'PostgreSQL', 'Redis',
+    'Machine Learning', 'AI', 'Data Science', 'DevOps', 'CI/CD', 'Microservices',
+    
+    // Roles & Levels
+    'Senior', 'Lead', 'Principal', 'Staff', 'Manager', 'Director', 'VP',
+    'Frontend', 'Backend', 'Full Stack', 'Mobile', 'iOS', 'Android',
+    
+    // Benefits & Culture
+    'Remote Work', 'Flexible Hours', 'Health Insurance', 'Stock Options',
+    'Equity', '401k', 'Unlimited PTO', 'Learning Budget', 'Startup',
+    'Enterprise', 'Agile', 'Scrum', 'Innovation', 'Growth', 'Mentorship',
+    
+    // Industries
+    'Fintech', 'Healthcare', 'EdTech', 'E-commerce', 'Gaming', 'SaaS',
+    'Blockchain', 'Cybersecurity', 'IoT', 'Clean Energy', 'Biotech'
+  ];
+
   const loadPreferences = async () => {
     try {
       setLoading(true);
@@ -57,7 +88,7 @@ const PreferencesPage = () => {
     }
   };
 
-  const addLocation = () => {
+const addLocation = () => {
     if (newLocation.trim()) {
       setPreferences(prev => ({
         ...prev,
@@ -65,6 +96,14 @@ const PreferencesPage = () => {
       }));
       setNewLocation('');
     }
+  };
+
+  const handleLocationSuggestionSelect = (suggestion) => {
+    setPreferences(prev => ({
+      ...prev,
+      locations: [...prev.locations, suggestion]
+    }));
+    setNewLocation('');
   };
 
   const removeLocation = (index) => {
@@ -91,7 +130,7 @@ const PreferencesPage = () => {
     }));
   };
 
-  const addNegativeKeyword = () => {
+const addNegativeKeyword = () => {
     if (newNegativeKeyword.trim()) {
       setPreferences(prev => ({
         ...prev,
@@ -99,6 +138,22 @@ const PreferencesPage = () => {
       }));
       setNewNegativeKeyword('');
     }
+  };
+
+  const handlePositiveKeywordSuggestionSelect = (suggestion) => {
+    setPreferences(prev => ({
+      ...prev,
+      positiveKeywords: [...prev.positiveKeywords, suggestion]
+    }));
+    setNewPositiveKeyword('');
+  };
+
+  const handleNegativeKeywordSuggestionSelect = (suggestion) => {
+    setPreferences(prev => ({
+      ...prev,
+      negativeKeywords: [...prev.negativeKeywords, suggestion]
+    }));
+    setNewNegativeKeyword('');
   };
 
   const removeNegativeKeyword = (index) => {
@@ -204,9 +259,9 @@ const PreferencesPage = () => {
               <h3 className="text-lg font-semibold text-gray-900">Salary Expectations</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
-                label="Minimum Salary (Annual)"
+                label="Base Annual Salary (Gross)"
                 type="number"
                 placeholder="e.g., 80000"
                 value={preferences.minSalary}
@@ -214,9 +269,16 @@ const PreferencesPage = () => {
                 icon="DollarSign"
               />
               <div className="flex items-end">
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-600">
-                  <ApperIcon name="Info" size={16} className="inline mr-1" />
-                  Upper limit is open for negotiation
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
+                  <ApperIcon name="Info" size={16} className="inline mr-1 text-blue-600" />
+                  <div className="space-y-1">
+                    <div className="font-medium">Gross annual base salary</div>
+                    <div className="text-xs text-blue-600">
+                      • Before taxes and deductions<br/>
+                      • Excludes bonuses, equity, benefits<br/>
+                      • Upper limit open for negotiation
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -234,7 +296,7 @@ const PreferencesPage = () => {
               <h3 className="text-lg font-semibold text-gray-900">Preferred Locations</h3>
             </div>
             
-            <div className="flex gap-2 mb-4">
+<div className="flex gap-2 mb-4">
               <Input
                 placeholder="Add location (city, country, region, or 'worldwide')"
                 value={newLocation}
@@ -242,6 +304,9 @@ const PreferencesPage = () => {
                 onKeyPress={(e) => e.key === 'Enter' && addLocation()}
                 icon="MapPin"
                 className="flex-1"
+                suggestions={locationSuggestions}
+                showSuggestions={true}
+                onSuggestionSelect={handleLocationSuggestionSelect}
               />
               <Button
                 variant="primary"
@@ -337,13 +402,16 @@ const PreferencesPage = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Positive Keywords</h3>
               </div>
               
-              <div className="flex gap-2 mb-4">
+<div className="flex gap-2 mb-4">
                 <Input
                   placeholder="Add keywords you want to see"
                   value={newPositiveKeyword}
                   onChange={(e) => setNewPositiveKeyword(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addPositiveKeyword()}
                   className="flex-1"
+                  suggestions={keywordSuggestions}
+                  showSuggestions={true}
+                  onSuggestionSelect={handlePositiveKeywordSuggestionSelect}
                 />
                 <Button
                   variant="accent"
@@ -382,13 +450,16 @@ const PreferencesPage = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Negative Keywords</h3>
               </div>
               
-              <div className="flex gap-2 mb-4">
+<div className="flex gap-2 mb-4">
                 <Input
                   placeholder="Add keywords to avoid"
                   value={newNegativeKeyword}
                   onChange={(e) => setNewNegativeKeyword(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addNegativeKeyword()}
                   className="flex-1"
+                  suggestions={keywordSuggestions}
+                  showSuggestions={true}
+                  onSuggestionSelect={handleNegativeKeywordSuggestionSelect}
                 />
                 <Button
                   variant="secondary"
