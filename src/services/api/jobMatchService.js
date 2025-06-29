@@ -33,7 +33,7 @@ const params = {
         "pagingInfo": { "limit": 50, "offset": 0 }
       };
 
-      const response = await apperClient.fetchRecords('job_match', params);
+const response = await apperClient.fetchRecords('job_match', params);
       
       if (!response.success) {
         console.error(response.message);
@@ -41,7 +41,14 @@ const params = {
         return [];
       }
 
-      return response.data || [];
+      // Transform data to include both snake_case and camelCase properties for compatibility
+      const transformedData = (response.data || []).map(job => ({
+        ...job,
+        profileMatch: job.profile_match || 0,
+        preferenceMatch: job.preference_match || 0
+      }));
+
+      return transformedData;
     } catch (error) {
       console.error("Error fetching job matches:", error);
       toast.error("Failed to load job matches");
@@ -77,7 +84,7 @@ const params = {
         ]
       };
 
-      const response = await apperClient.getRecordById('job_match', parseInt(id), params);
+const response = await apperClient.getRecordById('job_match', parseInt(id), params);
       
       if (!response.success) {
         console.error(response.message);
@@ -85,7 +92,17 @@ const params = {
         return null;
       }
 
-      return response.data;
+      // Transform data to include both snake_case and camelCase properties for compatibility
+      const job = response.data;
+      if (job) {
+        return {
+          ...job,
+          profileMatch: job.profile_match || 0,
+          preferenceMatch: job.preference_match || 0
+        };
+      }
+
+      return job;
     } catch (error) {
       console.error("Error fetching job match:", error);
       toast.error("Failed to load job match");

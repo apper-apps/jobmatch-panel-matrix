@@ -11,12 +11,14 @@ const JobMatchCard = ({ job, className = '' }) => {
     company,
     location,
     salary,
+    profile_match,
+    preference_match,
     profileMatch,
     preferenceMatch,
-    workArrangement,
-    jobType,
+    work_arrangement: workArrangement,
+    job_type: jobType,
     description,
-    companyDescription,
+    company_description: companyDescription,
     url,
     logo
   } = job;
@@ -54,15 +56,15 @@ const JobMatchCard = ({ job, className = '' }) => {
           </div>
         </div>
         
-        <div className="flex gap-3">
+<div className="flex gap-3">
           <ProgressRing
-            percentage={profileMatch}
+            percentage={profileMatch || profile_match || 0}
             size={60}
             color="#2563eb"
             label="Profile"
           />
           <ProgressRing
-            percentage={preferenceMatch}
+            percentage={preferenceMatch || preference_match || 0}
             size={60}
             color="#10b981"
             label="Preference"
@@ -96,14 +98,14 @@ const JobMatchCard = ({ job, className = '' }) => {
       )}
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <div className="flex items-center gap-4 text-xs text-gray-500">
+<div className="flex items-center gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-1">
             <ApperIcon name="Target" size={12} />
-            <span>Profile: {profileMatch}%</span>
+            <span>Profile: {profileMatch || profile_match || 0}%</span>
           </div>
           <div className="flex items-center gap-1">
             <ApperIcon name="Heart" size={12} />
-            <span>Preference: {preferenceMatch}%</span>
+            <span>Preference: {preferenceMatch || preference_match || 0}%</span>
           </div>
         </div>
         
